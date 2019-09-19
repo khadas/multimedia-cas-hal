@@ -1,5 +1,5 @@
 #ifndef CA_DEBUG_LEVEL
-#define CA_DEBUG_LEVEL -1
+#define CA_DEBUG_LEVEL 2
 #endif
 
 #include <stdarg.h>
@@ -8,7 +8,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
-
+#include <am_debug.h>
 #include <am_smc.h>
 #include <am_dmx.h>
 
@@ -124,34 +124,6 @@ int vmx_port_init()
     pthread_cond_init( &g_smc_info.cond, NULL );
     g_smc_info.i_enable_thread = 1;
     pthread_create( &g_smc_info.i_thread, NULL, am_smc_thread, NULL );
-
-    /*nvram init*/
-    uint8_t buf[65535];
-    FILE *fp;
-    int ret;
-    memset( buf, 0xff, sizeof( buf ) );
-
-    if ( access( AM_NVM_FILE, 0 ) == -1 ) {
-        fp = fopen( AM_NVM_FILE, "wb" );
-        if ( fp ) {
-            ret = fwrite( buf, 1, sizeof( buf ), fp );
-            fclose( fp );
-        }
-
-    }
-    for ( i = 0; i < MAX_NVM_BLOCK_NUM; i++ ) {
-        char fname[64];
-        memset( fname, 0, sizeof( fname ) );
-        sprintf( fname, "%s%d", AM_NVM_FILE, i );
-        if ( access( fname, 0 ) == -1 ) {
-            fp = fopen( fname, "wb" );
-            if ( fp ) {
-                ret = fwrite( buf, 1, sizeof( buf ), fp );
-                fclose( fp );
-            }
-
-        }
-    }
 
     get_boxid();
     return 0;
@@ -831,7 +803,8 @@ int16_t  MMI_SetDescrambling_State( uint16_t wIndex,
     UNUSED(pawStreamPid);
     UNUSED(paenDescState);
     UNUSED(bServiceIdx);
-    CA_DEBUG( 1, "@@call %s, wIndex=%d", __FUNCTION__, wIndex );
+    CA_DEBUG( 1, "@@call %s, [%d]state=%d, wIndex=%d", 
+	__FUNCTION__, bServiceIdx, *paenDescState, wIndex );
     return 0;
 }
 
@@ -991,16 +964,16 @@ int32_t  SYS_GetTickCount( void_t )
 
 int16_t  SYS_ReadNvmBlock( uint8_t *pabDest, uint16_t wLength )
 {
-    //CA_DEBUG( 0, "@@call %s @@", __FUNCTION__ );
+    CA_DEBUG( 0, "@@call %s @@[%#x]", __FUNCTION__, wLength);
     FILE *fp;
     int ret;
 
     //assert( AM_NVM_FILE && pabDest );
-
+    memset(pabDest, 0xff, wLength);
     fp = fopen( AM_NVM_FILE, "rb" );
     if ( !fp ) {
-        CA_DEBUG( 2, "cannot open" );
-        return AM_FAILURE;
+        CA_DEBUG( 2, "cannot open %d" , __LINE__);
+        return k_BcSuccess;
     }
 
     ret = fread( pabDest, 1, wLength, fp );
@@ -1019,7 +992,7 @@ int16_t  SYS_ReadNvmBlock( uint8_t *pabDest, uint16_t wLength )
 
 int16_t  SYS_WriteNvmBlock( uint8_t *pabSrc, uint16_t wLength )
 {
-    //CA_DEBUG( 0, "@@call %s @@", __FUNCTION__ );
+    CA_DEBUG( 0, "@@call %s @@", __FUNCTION__ );
     FILE *fp;
     int ret;
 
@@ -1029,7 +1002,7 @@ int16_t  SYS_WriteNvmBlock( uint8_t *pabSrc, uint16_t wLength )
     }
     fp = fopen( AM_NVM_FILE, "wb" );
     if ( !fp ) {
-        CA_DEBUG( 2, "cannot open");
+        CA_DEBUG( 2, "cannot open %d" , __LINE__);
         return AM_FAILURE;
     }
     ret = fwrite( pabSrc, 1, wLength, fp );
@@ -1048,7 +1021,7 @@ int16_t  SYS_WriteNvmBlock( uint8_t *pabSrc, uint16_t wLength )
 
 int16_t  SYS_ReadNvmData( uint8_t bBlockId, uint8_t *pabDest, uint16_t wLength )
 {
-    //CA_DEBUG( 0, "@@call %s @@", __FUNCTION__ );
+    CA_DEBUG( 0, "@@call %s @@[%d][%#x]", __FUNCTION__ , bBlockId, wLength);
     char fname[128];
     FILE *fp;
     int ret;
@@ -1056,13 +1029,14 @@ int16_t  SYS_ReadNvmData( uint8_t bBlockId, uint8_t *pabDest, uint16_t wLength )
         CA_DEBUG( 2, "%s, blockID:%d is too max", __FUNCTION__, bBlockId );
         return k_BcError;
     }
+    memset(pabDest, 0xff, wLength);
     memset( fname, 0, sizeof( fname ) );
     sprintf( fname, "%s%d", AM_NVM_FILE, bBlockId );
 
     fp = fopen( fname, "rb" );
     if ( !fp ) {
-        CA_DEBUG( 1, "cannot open" );
-        return AM_FAILURE;
+        CA_DEBUG( 2, "cannot open %d" , __LINE__);
+        return k_BcSuccess;
     }
 
     ret = fread( pabDest, 1, wLength, fp );
@@ -1081,7 +1055,7 @@ int16_t  SYS_ReadNvmData( uint8_t bBlockId, uint8_t *pabDest, uint16_t wLength )
 
 int16_t  SYS_WriteNvmData( uint8_t bBlockId, uint8_t *pabSrc, uint16_t wLength )
 {
-    //CA_DEBUG( 0, "@@call %s @@", __FUNCTION__ );
+    CA_DEBUG( 0, "@@call %s @@", __FUNCTION__ );
     char fname[128];
     FILE *fp;
     int ret;
@@ -1094,7 +1068,7 @@ int16_t  SYS_WriteNvmData( uint8_t bBlockId, uint8_t *pabSrc, uint16_t wLength )
 
     fp = fopen( fname, "wb" );
     if ( !fp ) {
-        CA_DEBUG( 1, "cannot open" );
+        CA_DEBUG( 2, "cannot open %d" , __LINE__);
         return AM_FAILURE;
     }
     ret = fwrite( pabSrc, 1, wLength, fp );

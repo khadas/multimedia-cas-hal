@@ -41,9 +41,11 @@
 static void *dl_handle = NULL;
 struct AM_CA_Impl_t *cas_ops = NULL;
 uint8_t g_cas_loaded = 0;
+extern struct AM_CA_Impl_t *get_cas_ops(void);
 
 int loadAllCASLibraries(void)
 {
+#ifdef DYNAMIC_LOAD
     //TODO: now only load verimatrix CAS
     dl_handle = dlopen("libvmx_dvb.so", RTLD_NOW);
     if (!dl_handle) {
@@ -57,7 +59,12 @@ int loadAllCASLibraries(void)
         dlclose(dl_handle);
         return -1;
     }
-
+#else
+    cas_ops = get_cas_ops();
+    if (!cas_ops) {
+	CA_DEBUG(2, "CAS get ops failed");
+    }
+#endif
     g_cas_loaded = 1;
 
     return cas_ops->pre_init();
@@ -93,12 +100,15 @@ AM_RESULT AM_CA_Init(int CA_system_id, CasHandle* handle)
     int ret = 0;
     CAS_ASSERT(handle);
 
-    if (!g_cas_loaded) {
-	ret = loadAllCASLibraries();
-	if (ret) {
-	    CA_DEBUG(2, "CAS load failed or pre-init failed.");
-	    return AM_ERROR_NOT_LOAD;
-	}
+    if (g_cas_loaded) {
+	CA_DEBUG(2, "CAS loaded already, return");
+	return AM_ERROR_SUCCESS;
+    }
+
+    ret = loadAllCASLibraries();
+    if (ret) {
+	CA_DEBUG(2, "CAS load failed or pre-init failed.");
+	return AM_ERROR_NOT_LOAD;
     }
 
     if(!AM_CA_IsSystemIdSupported(CA_system_id)) {
@@ -142,6 +152,7 @@ AM_RESULT AM_CA_Term(CasHandle handle)
  */
 AM_RESULT AM_CA_OpenSession(CasHandle handle, CasSession* session)
 {
+    CAS_ASSERT(handle);
     CAS_ASSERT(session);
 
     *session = (CasSession)malloc(sizeof(CAS_SessionInfo_t));

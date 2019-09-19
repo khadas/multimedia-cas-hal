@@ -37,13 +37,12 @@ LOCAL_C_INCLUDES := \
 LOCAL_SHARED_LIBRARIES += liblog \
   libcutils \
   libutils \
-  libteec \
-  libam_adp
+  libteec
 
-LOCAL_STATIC_LIBRARIES += libvmx_ree libcaclientapi
+LOCAL_STATIC_LIBRARIES += libvmx_ree libcaclientapi libam_adp
 
 LOCAL_CFLAGS += -O0 -DANDROID
 
-LOCAL_PROPRIETARY_MODULE := true
+#LOCAL_PROPRIETARY_MODULE := true
 
-include $(BUILD_SHARED_LIBRARY) 
+include $(BUILD_STATIC_LIBRARY) 

@@ -40,6 +40,7 @@ typedef struct {
     uint8_t *dvr_shm;
 }VMX_PrivateInfo_t;
 
+struct AM_CA_Impl_t * get_cas_ops(void);
 static int vmx_pre_init(void);
 static int vmx_init(CasHandle handle);
 static int vmx_term(CasHandle handle);
@@ -58,7 +59,7 @@ static int vmx_dvr_replay(CasSession session, AM_CA_StoreInfo_t *storeInfo, AM_C
 static int vmx_dvr_stop_replay(CasSession session);
 static int vmx_get_securebuf(uint8_t **buf, uint32_t len);
 
-const struct AM_CA_Impl_t cas_ops =
+const struct AM_CA_Impl_t vmx_cas_ops =
 {
 .pre_init = vmx_pre_init,
 .init = vmx_init,
@@ -81,6 +82,11 @@ const struct AM_CA_Impl_t cas_ops =
 
 static pthread_t bcThread = ( pthread_t )NULL;
 static pthread_mutex_t vmx_bc_mutex = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
+
+struct AM_CA_Impl_t * get_cas_ops(void)
+{
+    return &vmx_cas_ops;
+}
 
 static int get_dvbsi_time( time_t timeseconds, uint8_t dvbtime[5] )
 {
@@ -150,11 +156,23 @@ static void print_scinfo(void)
 static int vmx_pre_init(void)
 {
     int16_t bcRet;
+    uint8_t version[32];
+    uint8_t date[20];
+    uint8_t timestr[20];
 
     CA_init();
     vmx_port_init();
+
+    vmx_bc_lock();
     bcRet = BC_Init();
+    vmx_bc_unlock();
     CA_DEBUG(0, "BC-Init: %04x\n", (uint16_t)bcRet);
+
+    vmx_bc_lock();
+    BC_GetVersion(version, date, timestr );
+    vmx_bc_unlock();
+    CA_DEBUG(0, "ver %s %s %s\n", version, date, timestr);
+
     BC_InitWindow(1920, 1080, NULL);
 
     pthread_create( &bcThread, NULL, bcHandlingThread, NULL );
@@ -165,7 +183,22 @@ static int vmx_pre_init(void)
 
 static int vmx_init(CasHandle handle)
 {
+    uint8_t *buf = NULL;
+    uint8_t tmp_buf[32] = {0};
+
     CA_DEBUG(0, "%s", __func__);
+    if (CA_GetSecureBuffer(&buf, DVR_SIZE)) {
+	CA_DEBUG(0, "CA get secure buffer failed");
+	return -1;
+    }
+
+    sprintf(tmp_buf, "%d", buf);
+    AM_FileEcho("/sys/class/stb/asyncfifo0_secure_enable", "1");
+    AM_FileEcho("/sys/class/stb/asyncfifo0_secure_addr", tmp_buf);
+    AM_FileEcho( "/sys/class/stb/demux_reset", "1");
+
+    ((CAS_CasInfo_t *)handle)->secure_buf = buf;
+
     return 0;
 }
 
@@ -229,7 +262,7 @@ static int vmx_start_descrambling(CasSession session, AM_CA_ServiceInfo_t *servi
 {
     uint8_t *p;
     int i, ret;
-    int dsc_chan_handle;
+    int dsc_chan_handle = 0;
     ca_service_info_t ca_svc_info;
     VMX_PrivateInfo_t *vmx_pri_info = NULL;
 
@@ -296,7 +329,7 @@ static int vmx_update_descrambling_pid(CasSession session, uint16_t oldStreamPid
 
 static int vmx_stop_descrambling(CasSession session)
 {
-    int i;
+    int i, ret;
     uint16_t svc_id;
     VMX_PrivateInfo_t *private_data;
 
@@ -308,10 +341,15 @@ static int vmx_stop_descrambling(CasSession session)
 	return -1;
     }
 
-    BC_StopDescrambling(svc_id, private_data->service_index);
-
+    ret = BC_StopDescrambling(svc_id, private_data->service_index);
+    CA_DEBUG(0, "BC_StopDescrambling ret[%d], ch_cnt = %d.", ret, private_data->dsc_chan_count);
     for (i = 0; i < private_data->dsc_chan_count; i++) {
-	CA_DscClose(private_data->dsc_chan_handle[i]);
+	ret = CA_DscClose(private_data->dsc_chan_handle[i]);
+	if (ret) {
+	    CA_DEBUG(2, "CA_DscClose failed[%d].", ret);
+	} else {
+	    CA_DEBUG(0, "CA_DscClose fd[%d].", private_data->dsc_chan_handle[i]);
+	}
     }
 
     vmx_bc_unlock();
@@ -359,7 +397,6 @@ static int vmx_dvr_start(CasSession session, AM_CA_ServiceInfo_t *service_info, 
     private_data = (VMX_PrivateInfo_t *)((CAS_SessionInfo_t *)session)->private_data;
     if (private_data && (private_data->dvr_shm == NULL)) {
 	private_data->dvr_shm = (uint8_t *)ree_shm_alloc(DVR_SIZE);
-	info->reserved = private_data->dvr_shm;
     }
     CA_DEBUG(0, "CAS DVR record [%#x %#x %#x]", private_data->service_index, info->infoLen, dvbtime[0]);
     rc = BC_DVRRecord(private_data->service_index, 0, info->info, info->infoLen, dvbtime);
@@ -402,7 +439,7 @@ static int vmx_dvr_stop(CasSession session)
 static int vmx_dvr_encrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara, AM_CA_StoreInfo_t *storeInfo)
 {
     uint16_t rc;
-
+    VMX_PrivateInfo_t * private_data;
     shm_r2r_t shm_in, shm_out;
 
     if (storeInfo == NULL) {
@@ -410,7 +447,13 @@ static int vmx_dvr_encrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara, A
 	return -1;
     }
 
+    if (cryptoPara->buf_len > DVR_SIZE) {
+	CA_DEBUG(2, "encrypt buffer overflow DVR_SIZE");
+	return -1;
+    }
+
     vmx_bc_lock();
+    private_data = (VMX_PrivateInfo_t *)((CAS_SessionInfo_t *)session)->private_data;
     CA_update_afifo_pos(cryptoPara->buf_in);
 
     memset(&shm_in, 0x0, sizeof(shm_r2r_t));
@@ -422,7 +465,7 @@ static int vmx_dvr_encrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara, A
     memset(&shm_out, 0x0, sizeof(shm_r2r_t));
     shm_out.magic = SHM_R2R_MAGIC;
     shm_out.type = SHM_R2R_TYPE_REE;
-    shm_out.vaddr = cryptoPara->buf_out;
+    shm_out.vaddr = private_data->dvr_shm;
     shm_out.size = cryptoPara->buf_len;
 
     storeInfo->actualStoreInfoLen = MAX_STOREINFO_LEN;
@@ -436,8 +479,12 @@ static int vmx_dvr_encrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara, A
     if (rc != k_BcSuccess) {
 	CA_DEBUG(2, "BC_DVREncrypt failed, rc = %d", rc);
     }
+
     ree_shm_update_tee(shm_out.vaddr, shm_out.size);
+    memcpy(cryptoPara->buf_out, shm_out.vaddr, shm_out.size);
+    cryptoPara->buf_type = BUF_NORMAL;
     vmx_bc_unlock();
+
     return 0;
 }
 
@@ -446,25 +493,36 @@ static int vmx_dvr_decrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
     uint16_t rc;
     uint8_t channelid = 0;
     shm_r2r_t shm_in, shm_out;
+    VMX_PrivateInfo_t * private_data;
+
+    if (cryptoPara->buf_len > DVR_SIZE) {
+	CA_DEBUG(2, "decrypt buffer overflow DVR_SIZE");
+	return -1;
+    }
 
     vmx_bc_lock();
+    private_data = (VMX_PrivateInfo_t *)((CAS_SessionInfo_t *)session)->private_data;
+    memcpy(private_data->dvr_shm, cryptoPara->buf_in, cryptoPara->buf_len);
     memset(&shm_in, 0x0, sizeof(shm_r2r_t));
     shm_in.magic = SHM_R2R_MAGIC;
     shm_in.type = SHM_R2R_TYPE_REE;
-    shm_in.vaddr = cryptoPara->buf_in;
+    shm_in.vaddr = private_data->dvr_shm;
     shm_in.size = cryptoPara->buf_len;
 
     memset(&shm_out, 0x0, sizeof(shm_r2r_t));
     shm_out.magic = SHM_R2R_MAGIC;
     shm_out.type = SHM_R2R_TYPE_SEC;
-    shm_out.paddr = cryptoPara->buf_out;
+    shm_out.paddr = ((CAS_CasInfo_t *)((CAS_SessionInfo_t *)session)->cas_handle)->secure_buf;
     shm_out.size = cryptoPara->buf_len;
 
     ree_shm_update_ree(shm_in.paddr, shm_in.size);
     rc = BC_DVRDecrypt(channelid,
 		(uint8_t *)&shm_out, (uint8_t *)&shm_in,
 		sizeof(shm_r2r_t));
+    cryptoPara->buf_type = BUF_SECURE;
+    cryptoPara->buf_out = shm_out.paddr;
     vmx_bc_unlock();
+
     if(rc != k_BcSuccess) {
 	CA_DEBUG(2, "BC_DVRDecrypt failed, rc = %d", rc);
 	return -1;
@@ -474,7 +532,6 @@ static int vmx_dvr_decrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 
 static int vmx_dvr_replay(CasSession session, AM_CA_StoreInfo_t *storeInfo, AM_CA_PrivateInfo_t *info)
 {
-    int ret;
     uint16_t rc;
     uint8_t dvbtime[5];
     uint8_t channelid = 0;
@@ -494,7 +551,6 @@ static int vmx_dvr_replay(CasSession session, AM_CA_StoreInfo_t *storeInfo, AM_C
 	return -1;
     }
     private_data->dvr_shm = (uint8_t *)ree_shm_alloc(DVR_SIZE);
-    info->reserved = private_data->dvr_shm;
 
     memset(&ca_svc_info, 0x0, sizeof(ca_service_info_t));
     //TODO: caculate service_index

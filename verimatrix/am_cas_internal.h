@@ -28,6 +28,7 @@
 #define _AM_CAS_INTERNAL_H
 
 typedef struct {
+   uint8_t *secure_buf;
    void *private_data;
 }CAS_CasInfo_t;
 
@@ -44,7 +45,6 @@ typedef enum {
     SCRAMBLE_ALGO_INVALID,
     SCRAMBLE_ALGO_NONE
 } SCRAMBLE_ALGO_t;
-
 
 typedef enum {
     SCRAMBLE_MODE_ECB,

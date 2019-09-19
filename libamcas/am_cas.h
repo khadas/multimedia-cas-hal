@@ -47,6 +47,12 @@ typedef enum {
 	SERVICE_DVR
 }CA_SERVICE_TYPE_t;
 
+typedef enum
+{
+        BUF_NORMAL,
+        BUF_SECURE
+} Buffer_Type;
+
 /**\brief Service descrambling information*/
 typedef struct {
 	uint16_t service_id;
@@ -68,7 +74,6 @@ typedef struct {
 	void *reserved;
 }AM_CA_PrivateInfo_t;
 
-
 /**\brief CAS dvr information*/
 typedef struct {
 	uint8_t storeInfo[MAX_STOREINFO_LEN];
@@ -80,6 +85,7 @@ typedef struct {
 	uint8_t *buf_in;
 	uint8_t *buf_out;
 	uint32_t buf_len;
+	Buffer_Type buf_type;
 }AM_CA_CryptoPara_t;
 
 /**\brief Error code of the CAS-Hal module*/

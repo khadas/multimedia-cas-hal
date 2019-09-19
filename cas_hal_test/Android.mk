@@ -15,19 +15,29 @@ LOCAL_C_INCLUDES := \
 		frameworks/av/include \
 		hardware/amlogic/media/amcodec/include \
 
-LOCAL_SHARED_LIBRARIES := libam_adp liblog libteec
+LOCAL_SHARED_LIBRARIES := liblog libteec
 
 LOCAL_STATIC_LIBRARIES += \
   libcutils \
   libutils \
-  libam_cas
+  libam_adp \
+  libcutils \
+  libcaclientapi \
+  libvmx_ree \
+  libam_cas \
+  libvmx_dvb \
+  libvmx_ree \
+  libcaclientapi
+
+LOCAL_STATIC_LIBRARIES += libam_mw libam_adp libcutils
+
 
 	
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE:= cas_hal_test
 
 
-LOCAL_PROPRIETARY_MODULE := true
+#LOCAL_PROPRIETARY_MODULE := true
 
 include $(BUILD_EXECUTABLE)
 
