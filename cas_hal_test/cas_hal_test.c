@@ -209,7 +209,7 @@ static void *dvr_play_thread(void *arg)
     while (dd->running) {
 	streamPos = nextStreamPos;
 	if (streamPos == ULLONG_MAX) {
-	    break;
+	    //break;
 	}
 	if ((len = read(dd->datfd, &storeInfoLen, 2)) != 2) {
 	    goto failstop;
@@ -239,7 +239,7 @@ dvrreplay:
 	caPrivateInfo.infoLen = infoLen;
 	ret = AM_CA_DVRReplay(g_cas_session, &caStoreInfo, &caPrivateInfo);
 	if (ret) {
-	    printf("CAS DVR play failed. [%#x, %#x]\r\n", storeInfoLen, infoLen);
+	    printf("CAS DVR play failed. ret = %d, [%#x, %#x]\r\n", ret, storeInfoLen, infoLen);
 	    goto failstop;
 	}
         if (needsetinfo) {
@@ -250,17 +250,17 @@ dvrreplay:
         }
 
 	while (tspos < nextStreamPos) {
-            if ((len = read(dd->tsfd, caPrivateInfo.reserved, blockSize)) < 0) {
+            if ((len = read(dd->tsfd, tmp_buf, blockSize)) < 0) {
                 printf("%s L%d", __func__, __LINE__ );
                 goto failstop;
             }
-            printf("3.read data, bs:%d, len:%d. buf[%#x]\n", blockSize, len, caPrivateInfo.reserved);
+            printf("3.read data, bs:%d, len:%d. buf[%#x]\n", blockSize, len, tmp_buf);
             if (len == 0) {
                 printf("%s L%d", __func__, __LINE__);
                 break;
             }
 
-	    cryptoPara.buf_in = caPrivateInfo.reserved;
+	    cryptoPara.buf_in = tmp_buf;
 	    cryptoPara.buf_out = bufout;
 	    cryptoPara.buf_len = blockSize;
 	    ret = AM_CA_DVRDecrypt(g_cas_session, &cryptoPara);
@@ -270,7 +270,7 @@ dvrreplay:
 	    }
 	    tspos += blockSize;
 
-	    ret = 0;//CA_CopyNormal(bufout, blockSize, tmp_buf, &len);
+	    ret = CA_CopyNormal(bufout, blockSize, tmp_buf, &len);
 	    if (ret < 0) printf("++failed to copy\r\n");
 	    if (write(dd->dumpfd, tmp_buf, len) != len) {
 		printf("dump write failed\r\n");
@@ -305,7 +305,7 @@ static int fend_lock() {
 
     AM_FEND_SetMode(FEND_DEV_NO, fpara.mode);
 
-    p.frequency = 666000000;
+    p.frequency = 682000000;
     p.u.qam.symbol_rate = 6870000;
     p.u.qam.fec_inner = FEC_AUTO;
     p.u.qam.modulation = QAM_64;
@@ -521,7 +521,7 @@ static int record_program(Program_Info_t *prog, char *tspath)
 	return -1;
     }
 
-    dd->crypt_buf = cas_pri_info.reserved;
+    dd->crypt_buf = malloc(RECORD_BLOCK_SIZE);
     CA_DEBUG(0, "R2R out buffer addr: %#x\r\n", dd->crypt_buf);
 
 record:

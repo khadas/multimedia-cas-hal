@@ -19,7 +19,7 @@
 #include "am_cas.h"
 
 #define SMC_DEV_NO (0)
-#define DMX_DEV_NO (0)
+#define DMX_DEV_NO (1)
 
 #define MAX_FILTER_NUM 			16
 #define MAX_ECM_BUF_SIZE		2048
@@ -576,7 +576,7 @@ int16_t  FS_SetECMFilter( uint8_t bFilterId, enFilterMode_t mode, uint16_t wEcmP
 
 int16_t  FS_ReadECM( uint8_t bFilterId, uint8_t *pabBuffer, uint16_t *pwLen )
 {
-    //CA_DEBUG( 0, "@@call %s @@", __FUNCTION__ );
+    //CA_DEBUG( 0, "@@call %s bFilterId = %d @@", __FUNCTION__, bFilterId);
     bFilterId = getSequentialFilterIdx( bFilterId );
     if ( bFilterId >= MAX_FILTER_NUM ) {
         return k_BcError;

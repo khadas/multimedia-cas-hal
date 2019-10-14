@@ -26,7 +26,7 @@ LOCAL_STATIC_LIBRARIES += \
   libvmx_ree \
   libam_cas \
   libvmx_dvb \
-  libvmx_ree \
+  libvmx_ree_dual \
   libcaclientapi
 
 LOCAL_STATIC_LIBRARIES += libam_mw libam_adp libcutils
