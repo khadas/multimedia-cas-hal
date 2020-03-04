@@ -225,6 +225,4 @@ AM_RESULT AM_CA_DVRReplay(CasSession session, AM_CA_StoreInfo_t *storeInfo, AM_C
  * \return Error code
  */
 AM_RESULT AM_CA_DVRStopReplay(CasSession session);
-
-AM_RESULT AM_CA_GetSecureBuffer(uint8_t **buf, uint32_t len);
 #endif

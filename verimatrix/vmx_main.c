@@ -26,7 +26,7 @@
 #define SHM_R2R_TYPE_TEE        0x02
 #define SHM_R2R_TYPE_SEC        0x03
 
-#define USE_SECMEM
+//#define USE_SECMEM
 typedef struct {
        uint32_t magic;
        uint32_t type;

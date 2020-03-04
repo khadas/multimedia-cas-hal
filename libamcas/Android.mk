@@ -35,8 +35,6 @@ LOCAL_SHARED_LIBRARIES += liblog\
   libcutils \
   libutils \
 
-LOCAL_STATIC_LIBRARIES += libvmx_dvb
-
 LOCAL_CFLAGS += -O0
 
 #LOCAL_PROPRIETARY_MODULE := true

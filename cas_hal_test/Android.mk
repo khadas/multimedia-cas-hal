@@ -18,12 +18,8 @@ LOCAL_C_INCLUDES := \
 LOCAL_SHARED_LIBRARIES := liblog libteec
 
 LOCAL_STATIC_LIBRARIES += \
-  libcutils \
   libutils \
-  libam_adp \
-  libcutils \
   libcaclientapi \
-  libvmx_ree \
   libam_cas \
   libvmx_dvb \
   libvmx_ree_dual \

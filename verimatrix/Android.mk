@@ -39,8 +39,6 @@ LOCAL_SHARED_LIBRARIES += liblog \
   libutils \
   libteec
 
-LOCAL_STATIC_LIBRARIES += libvmx_ree_dual libcaclientapi libam_adp
-
 LOCAL_STRIP_MODULE := false
 
 LOCAL_CFLAGS += -O0 -DANDROID
