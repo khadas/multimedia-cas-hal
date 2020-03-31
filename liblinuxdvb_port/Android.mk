@@ -15,38 +15,26 @@
 
 LOCAL_PATH := $(call my-dir)
 
-
 include $(CLEAR_VARS)
-LOCAL_MODULE := libvmx_dvb
+LOCAL_MODULE := liblinuxdvb_port
 LOCAL_MULTILIB := 32
 LOCAL_ARM_MODE := arm
 LOCAL_SRC_FILES := \
-    vmx_main.c \
-    vmx_porting.c
+    src/am_dmx.c
 
 LOCAL_C_INCLUDES := \
 		$(LOCAL_PATH) \
+		$(LOCAL_PATH)/include \
 		$(LOCAL_PATH)/../libamcas \
-		$(LOCAL_PATH)/../liblinuxdvb_port/include \
-		$(LOCAL_PATH)/../includes.dir \
-		$(LOCAL_PATH)/../libcaclientapi/include \
-		
 
-LOCAL_SHARED_LIBRARIES += liblog \
+
+LOCAL_SHARED_LIBRARIES += liblog\
   libcutils \
   libutils \
-  libteec_sys
 
-LOCAL_STATIC_LIBRARIES += libvmx_ree_dual_aml \
-  liblinuxdvb_port \
-  libcaclientapi
-
-LOCAL_STRIP_MODULE := false
-
-LOCAL_CFLAGS += -O0 -DANDROID
+LOCAL_CFLAGS += -O0
 
 #LOCAL_PROPRIETARY_MODULE := true
-LOCAL_PRODUCT_MODULE := true
 
-#include $(BUILD_STATIC_LIBRARY) 
-include $(BUILD_SHARED_LIBRARY) 
+include $(BUILD_STATIC_LIBRARY) 
+

@@ -50,33 +50,4 @@ typedef struct emm_filter_s {
     uint8_t                             *p_write;
 } emm_filter_t;
 
-typedef enum {
-    SMC_WRITE_CMD,
-    SMC_READ_CMD,
-    SMC_INVALID_CMD
-} SMC_CMD_t;
-typedef enum {
-    SMC_RW_INIT,
-    SMC_READ_ERROR,
-    SMC_WRITE_ERROR,
-    SMC_READ_COMPLETED,
-    SMC_WRITE_COMPLETED
-} SMC_RW_STATUS_t;
-
-typedef struct smc_info_s {
-    pthread_t           i_thread;
-    pthread_mutex_t     lock;
-    pthread_cond_t              cond;
-    int                                 i_enable_thread;
-    int                                 i_cmd;
-    uint16_t                    i_timeout;
-    uint8_t                             i_atr_buf[AM_SMC_MAX_ATR_LEN];
-    int                                 i_atr_len;
-    uint8_t                             i_read_buf[AM_SMC_MAX_BUF];
-    uint16_t                    i_read_len;
-    uint8_t                             i_write_buf[AM_SMC_MAX_BUF];
-    uint16_t                    i_write_len;
-    int                                 b_status;
-
-} smc_info_t;
 #endif

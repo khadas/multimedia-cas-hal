@@ -12,10 +12,14 @@
 #include <pthread.h>
 #include <dlfcn.h>
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <errno.h>
+#include <sys/un.h>
+
 #include "bc_consts.h"
 #include "caclientapi.h"
-
-#include "am_debug.h"
 #include "am_cas.h"
 #include "am_cas_internal.h"
 
@@ -26,7 +30,7 @@
 #define SHM_R2R_TYPE_TEE        0x02
 #define SHM_R2R_TYPE_SEC        0x03
 
-//#define USE_SECMEM
+#define USE_SECMEM
 typedef struct {
        uint32_t magic;
        uint32_t type;
@@ -79,6 +83,7 @@ static int vmx_dvr_decrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara);
 static int vmx_dvr_replay(CasSession session, AM_CA_StoreInfo_t *storeInfo, AM_CA_PrivateInfo_t *info);
 static int vmx_dvr_stop_replay(CasSession session);
 static int vmx_get_securebuf(uint8_t **buf, uint32_t len);
+static int vmx_file_echo(const char *name, const char *cmd);
 
 static void *sec_mem_handle = NULL;
 /*Sec mem V2, open once session can only alloc once mem, no free API, close session will free it*/
@@ -124,19 +129,44 @@ struct AM_CA_Impl_t * get_cas_ops(void)
     return &vmx_cas_ops;
 }
 
+int vmx_file_echo(const char *name, const char *cmd)
+{
+    int fd, ret, len;
+    fd = open(name, O_WRONLY);
+    if(fd==-1)
+    {
+	CA_DEBUG(1, "cannot open file \"%s\"", name);
+	return -1;
+    }
+
+    len = strlen(cmd);
+
+    ret = write(fd, cmd, len);
+    if(ret!=len)
+    {
+	CA_DEBUG(1, "write failed file:\"%s\" cmd:\"%s\" error:\"%s\"", name, cmd, strerror(errno));
+	close(fd);
+	return -1;
+    }
+
+    close(fd);
+
+    return 0;
+}
+
 static int alloc_service_idx(void)
 {
     int i;
 
     for (i = 0; i < MAX_CHAN_COUNT; i++) {
 	if (!g_svc_idx[i].used) {
-	    AM_DEBUG(0, "allocated vmx svc idx %d", i);
+	    CA_DEBUG(0, "allocated vmx svc idx %d", i);
 	    g_svc_idx[i].used = 1;
 	    return i;
 	}
     }
 
-    AM_DEBUG(2, "alloc vmx svc idx failed.");
+    CA_DEBUG(2, "alloc vmx svc idx failed.");
     return -1;
 }
 
@@ -146,13 +176,13 @@ static void free_service_idx(int idx)
 
     for (i = 0; i < MAX_CHAN_COUNT; i++) {
 	if (g_svc_idx[i].used && (i == idx)) {
-	    AM_DEBUG(0, "freed vmx svc idx %d", i);
+	    CA_DEBUG(0, "freed vmx svc idx %d", i);
 	    g_svc_idx[i].used = 0;
 	    return;
 	}
     }
 
-    AM_DEBUG(0, "free vmx svc idx failed.");
+    CA_DEBUG(0, "free vmx svc idx failed.");
 }
 
 static int alloc_dvr_channelid(void)
@@ -161,13 +191,13 @@ static int alloc_dvr_channelid(void)
 
     for (i = 0; i < MAX_CHAN_COUNT; i++) {
 	if (!g_dvr_channelid[i].used) {
-	    AM_DEBUG(0, "allocated dvr channelid %d", i);
+	    CA_DEBUG(0, "allocated dvr channelid %d", i);
 	    g_dvr_channelid[i].used = 1;
 	    return i;
 	}
     }
 
-    AM_DEBUG(0, "alloc dvr channelid failed.");
+    CA_DEBUG(0, "alloc dvr channelid failed.");
     return -1;
 }
 
@@ -177,13 +207,13 @@ static void free_dvr_channelid(int id)
 
     for (i = 0; i < MAX_CHAN_COUNT; i++) {
 	if (g_dvr_channelid[i].used && (i == id)) {
-	    AM_DEBUG(0, "freed dvr channelid %d", i);
+	    CA_DEBUG(0, "freed dvr channelid %d", i);
 	    g_dvr_channelid[i].used = 0;
 	    break;
 	}
     }
 
-    AM_DEBUG(2, "free dvr channelid failed.");
+    CA_DEBUG(2, "free dvr channelid failed.");
 }
 
 static int get_dvbsi_time( time_t timeseconds, uint8_t dvbtime[5] )
@@ -326,11 +356,11 @@ static int vmx_init(CasHandle handle)
         }
         secmem_alloc = (def_secmem_alloc)dlsym(sec_mem_handle, "Secure_V2_ResourceAlloc");
         if (!secmem_alloc) {
-            CA_DEBUG("%s, failed to get secmem_alloc\n", __func__);
+            CA_DEBUG(0, "%s, failed to get secmem_alloc\n", __func__);
             dlclose(sec_mem_handle);
             return -1;
         }
-        CA_DEBUG("%s, secmem Init success\n", __func__);
+        CA_DEBUG(0, "%s, secmem Init success\n", __func__);
     }
 
     //to protect vdec buffer
@@ -359,15 +389,13 @@ static int vmx_init(CasHandle handle)
     }
 
     sprintf(tmp_buf, "%d", buf);
-    AM_FileEcho("/sys/class/stb/asyncfifo0_secure_enable", "1");
-    AM_FileEcho("/sys/class/stb/asyncfifo0_secure_addr", tmp_buf);
+    vmx_file_echo("/sys/class/stb/asyncfifo0_secure_enable", "1");
+    vmx_file_echo("/sys/class/stb/asyncfifo0_secure_addr", tmp_buf);
 
     buf += 512*1024;
     sprintf(tmp_buf, "%d", buf);
-    AM_FileEcho("/sys/class/stb/asyncfifo1_secure_enable", "1");
-    AM_FileEcho("/sys/class/stb/asyncfifo1_secure_addr", tmp_buf);
-
-    AM_FileEcho( "/sys/class/stb/demux_reset", "1");
+    vmx_file_echo("/sys/class/stb/asyncfifo1_secure_enable", "1");
+    vmx_file_echo("/sys/class/stb/asyncfifo1_secure_addr", tmp_buf);
 #else
     if (CA_GetSecureBuffer(&buf, DVR_SIZE)) {
 	CA_DEBUG(0, "CA get secure buffer failed");
@@ -375,9 +403,8 @@ static int vmx_init(CasHandle handle)
     }
 
     sprintf(tmp_buf, "%d", buf);
-    AM_FileEcho("/sys/class/stb/asyncfifo0_secure_enable", "1");
-    AM_FileEcho("/sys/class/stb/asyncfifo0_secure_addr", tmp_buf);
-    AM_FileEcho( "/sys/class/stb/demux_reset", "1");
+    vmx_file_echo("/sys/class/stb/asyncfifo0_secure_enable", "1");
+    vmx_file_echo("/sys/class/stb/asyncfifo0_secure_addr", tmp_buf);
 
     ((CAS_CasInfo_t *)handle)->secure_buf = buf;
 #endif
@@ -674,7 +701,6 @@ static int vmx_dvr_encrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara, A
 
     CA_DEBUG(0, "CAS DVR Encrypt[%d] (%#x, %#x, %#x)",
 		channelid, shm_in.paddr, shm_out.vaddr, shm_in.size);
-    vmx_bc_unlock();
 
     rc = BC_DVREncrypt(channelid, (uint8_t *)&shm_out,
 		(uint8_t *)&shm_in, sizeof(shm_r2r_t),
@@ -684,7 +710,6 @@ static int vmx_dvr_encrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara, A
 	storeInfo->actualStoreInfoLen = 0;
     }
 
-    CA_DEBUG(0, "hanyh: store len = %d", storeInfo->actualStoreInfoLen);
     ree_shm_update_tee(shm_out.vaddr, shm_out.size);
     memcpy(cryptoPara->buf_out, shm_out.vaddr, shm_out.size);
     cryptoPara->buf_type = 0;

@@ -28,13 +28,14 @@
 #define CA_DEBUG_LEVEL 2
 #endif
 
+#define DYNAMIC_LOAD
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <dlfcn.h>
 
-#include "am_debug.h"
 #include "am_cas.h"
 #include "am_cas_internal.h"
 
@@ -49,13 +50,13 @@ int loadAllCASLibraries(void)
     //TODO: now only load verimatrix CAS
     dl_handle = dlopen("libvmx_dvb.so", RTLD_NOW);
     if (!dl_handle) {
-	printf("%s , failed to open lib %s\r\n", __func__, dlerror());
+	CA_DEBUG(2, "%s , failed to open lib %s\r\n", __func__, dlerror());
 	return -1;
     }
 
-    cas_ops = (struct AM_CA_Impl_t *)dlsym(dl_handle, "cas_ops");
+    cas_ops = (struct AM_CA_Impl_t *)dlsym(dl_handle, "vmx_cas_ops");
     if (!cas_ops) {
-        printf("%s, failed to get cas_ops\r\n", __func__);
+        CA_DEBUG(2, "%s, failed to get cas_ops\r\n", __func__);
         dlclose(dl_handle);
         return -1;
     }

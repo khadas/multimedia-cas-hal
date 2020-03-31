@@ -8,10 +8,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
-#include <am_debug.h>
-#include <am_smc.h>
-#include <am_dmx.h>
+#include <linux/dvb/dmx.h>
 
+#include "am_dmx.h"
 #include "bc_main.h"
 #include "bc_consts.h"
 #include "caclientapi.h"
@@ -19,7 +18,7 @@
 #include "am_cas.h"
 
 #define SMC_DEV_NO (0)
-#define DMX_DEV_NO (1)
+#define DMX_DEV_NO (0)
 
 #define MAX_FILTER_NUM 			16
 #define MAX_ECM_BUF_SIZE		2048
@@ -36,8 +35,6 @@
 
 static int am_emm_buf_init();
 static void ( *am_smc_notify )() = NULL ;
-static void *am_smc_thread( void *arg );
-static void am_smc_cb( int dev_no, AM_SMC_CardStatus_t status, void *data );
 static int16_t  AM_FlushECM_Buffer( uint8_t bFilterId );
 
 ecm_filter_t 		g_ecm_filter[MAX_FILTER_NUM];
@@ -46,7 +43,6 @@ emm_filter_t 		g_emm_filter = {
     .i_emm_pid = 0,
     .b_init = 0,
 };
-smc_info_t			g_smc_info;
 uint32_t g_start_time = 0;
 uint16_t g_ca_system_id = 0xFFFF;
 static uint8_t g_boxid[8] = {0};
@@ -83,7 +79,6 @@ static void get_boxid() {
 int vmx_port_init()
 {
     int i;
-    AM_SMC_OpenPara_t para;
 
     memset( g_ecm_filter, 0, sizeof( g_ecm_filter ) );
     for ( i = 0; i < MAX_FILTER_NUM; i++ ) {
@@ -110,20 +105,7 @@ int vmx_port_init()
     pthread_mutex_init( &g_emm_filter.lock, NULL );
     g_emm_filter.b_init = 1;
 
-    /* sdcard init*/
-    memset( &para, 0, sizeof( para ) );
-    para.enable_thread = AM_TRUE;
-    AM_SMC_Open( SMC_DEV_NO, &para );
-    AM_SMC_SetCallback( SMC_DEV_NO, am_smc_cb, NULL );
-    memset( g_smc_info.i_atr_buf, 0, AM_SMC_MAX_ATR_LEN );
-    g_smc_info.i_atr_len = 0;
-    g_smc_info.i_timeout = 0;
-    g_smc_info.i_cmd = SMC_INVALID_CMD;
-    g_smc_info.b_status = SMC_RW_INIT;
-    pthread_mutex_init( &g_smc_info.lock, NULL );
-    pthread_cond_init( &g_smc_info.cond, NULL );
-    g_smc_info.i_enable_thread = 1;
-    pthread_create( &g_smc_info.i_thread, NULL, am_smc_thread, NULL );
+    am_dmx_init();
 
     get_boxid();
     return 0;
@@ -143,111 +125,8 @@ int vmx_port_deinit()
     }
     pthread_mutex_destroy( &g_emm_filter.lock );
 
-    g_smc_info.i_enable_thread = 0;
-    pthread_mutex_lock( &g_smc_info.lock );
-    g_smc_info.i_cmd = SMC_INVALID_CMD;
-    pthread_cond_signal( &g_smc_info.cond );
-    pthread_mutex_unlock( &g_smc_info.lock );
-    pthread_join( g_smc_info.i_thread, NULL );
-    pthread_mutex_destroy( &g_smc_info.lock );
-    pthread_cond_destroy( &g_smc_info.cond );
-    AM_SMC_Close( SMC_DEV_NO );
-
     return 0;
 }
-
-static void am_smc_cb( int dev_no, AM_SMC_CardStatus_t status, void *data )
-{
-    UNUSED(dev_no);
-    UNUSED(data);
-    CA_DEBUG( 1, "in am_smc_cb" );
-    if ( status == AM_SMC_CARD_IN ) {
-        if ( am_smc_notify )
-            am_smc_notify( BC_SC_INSERTED );
-        CA_DEBUG( 0, "%s, smartcard in", __FUNCTION__ );
-    } else {
-        if ( am_smc_notify ) {
-            am_smc_notify( BC_SC_REMOVED );
-            CA_DEBUG( 2, "%s, smartcard out notif", __FUNCTION__ );
-        }
-        CA_DEBUG( 0, "%s, smartcard out", __FUNCTION__ );
-    }
-}
-
-static void *am_smc_thread( void *arg )
-{
-    int ret;
-    int len = 0;
-    int index = 0;
-    uint8_t rx_buf[512];
-
-    UNUSED(arg);
-
-    while ( g_smc_info.i_enable_thread ) {
-        pthread_mutex_lock( &g_smc_info.lock );
-        pthread_cond_wait( &g_smc_info.cond, &g_smc_info.lock );
-
-        if ( g_smc_info.i_cmd == SMC_WRITE_CMD ) {
-            ret = AM_SMC_Write( SMC_DEV_NO, g_smc_info.i_write_buf, g_smc_info.i_write_len, g_smc_info.i_timeout );
-            if ( ret == AM_SUCCESS ) {
-                CA_DEBUG( 2, "@@@write sucess, timeout:%d, notify completed", g_smc_info.i_timeout );
-                g_smc_info.b_status = SMC_WRITE_COMPLETED;
-                if ( am_smc_notify )
-                    am_smc_notify( BC_SC_RW_COMPLETED );
-
-                memset( rx_buf, 0, sizeof( rx_buf ) );
-                ret = AM_SMC_Read( SMC_DEV_NO, rx_buf, 3, g_smc_info.i_timeout );
-                if ( ret == AM_SUCCESS ) {
-                    CA_DEBUG( 2, "@@@read step_1 sucess :%#x, %#x, %#x, timeout:%d",
-                              rx_buf[0], rx_buf[1], rx_buf[2], g_smc_info.i_timeout );
-                } else {
-                    CA_DEBUG( 2, "@@@@@read step_1 error, timeout:%d", g_smc_info.i_timeout );
-                    g_smc_info.b_status = SMC_READ_ERROR;
-                    goto final;
-                }
-                ret = AM_SMC_Read( SMC_DEV_NO, rx_buf + 3, rx_buf[2] + 1, g_smc_info.i_timeout );
-
-                len = rx_buf[2] + 4;
-                g_smc_info.i_read_len = rx_buf[2];
-                memcpy( g_smc_info.i_read_buf, rx_buf + 3, rx_buf[2] ); //only copy APDU
-                if ( ret == AM_SUCCESS ) {
-                    CA_DEBUG( 2, "smc thread notify read completed, len:%d, APDU buf:%#x - %#x  ",
-                              g_smc_info.i_read_len, g_smc_info.i_read_buf[0], g_smc_info.i_read_buf[g_smc_info.i_read_len - 1] );
-                    index = 0;
-                    while ( index < len ) {
-                        //CA_DEBUG( 0, "     %#x", rx_buf[index] );
-                        index++;
-                    }
-                    //edc
-                    uint8_t edc = rx_buf[0];;
-                    index = 1;
-                    while ( index < len - 1 ) {
-                        edc = edc ^ rx_buf[index];
-                        index++;
-                    }
-                    CA_DEBUG( 2, "###### readData edc :%#x, last_byte:%#x\n", edc, rx_buf[len - 1] );
-                    g_smc_info.b_status = SMC_READ_COMPLETED;
-                } else {
-                    CA_DEBUG( 2, "@@@read step_2 error, notify error" );
-                    g_smc_info.b_status = SMC_READ_ERROR;
-                    goto final;
-                }
-
-                CA_DEBUG( 2, "smc thread notify read_write completed" );
-
-                g_smc_info.i_cmd = SMC_INVALID_CMD;
-            } else {
-                CA_DEBUG( 2, "smc thread  write error" );
-                g_smc_info.b_status = SMC_WRITE_ERROR;
-                goto final;
-            }
-        }
-final:
-        pthread_mutex_unlock( &g_smc_info.lock );
-    }
-    return NULL;
-}
-
 
 static int am_emm_buf_init()
 {
@@ -262,6 +141,7 @@ static int am_emm_buf_write( const uint8_t *buf, int len )
 {
     if ( g_emm_filter.i_buf_len + len < MAX_EMM_BUF_SIZE ) {
         memcpy( g_emm_filter.p_buf + g_emm_filter.i_buf_len, buf, len );
+        CA_DEBUG( 1, "%s", __FUNCTION__ );
         g_emm_filter.i_buf_len += len;
         return len;
     } else {
@@ -307,7 +187,7 @@ static void am_emm_callback( int dev_no, int fid, const uint8_t *data, int len, 
     cur_addr_len = EMM_GET_ADDR_LEN( data );
 
     //CA_DEBUG(0, "%s, len:%d, sec_len:%d, cur_tid:%#x, cur_index:%d, cur_addr_len:%d",
-    // __FUNCTION__, len, cur_len, cur_tid, cur_index, cur_addr_len);
+     //__FUNCTION__, len, cur_len, cur_tid, cur_index, cur_addr_len);
 
     if ( cur_index < MAX_EMM_INDEX && cur_addr_len > 0 ) {
         if ( cur_len > MAX_EMM_SECTION_SIZE ) {
@@ -320,8 +200,8 @@ static void am_emm_callback( int dev_no, int fid, const uint8_t *data, int len, 
             am_emm_buf_write( ( const uint8_t * )&len_2, 1 );
             am_emm_buf_write( data, cur_len );
         } else {
-            // CA_DEBUG( 0, "%s, not match, data:%#x, %#x, %#x, cur_index:%d, cur_addr_len:%d",
-            //  __FUNCTION__, data[5], data[6], data[7], cur_index, cur_addr_len );
+             //CA_DEBUG( 0, "%s, not match, data:%#x, %#x, %#x, cur_index:%d, cur_addr_len:%d",
+             // __FUNCTION__, data[5], data[6], data[7], cur_index, cur_addr_len );
         }
     }
     pthread_mutex_unlock( &g_emm_filter.lock );
@@ -504,8 +384,8 @@ int16_t  FS_SetECMFilter( uint8_t bFilterId, enFilterMode_t mode, uint16_t wEcmP
         }
 
         AM_FlushECM_Buffer( bFilterId );
-        AM_DMX_StopFilter( DMX_DEV_NO, g_ecm_filter[bFilterId].i_fid );
-        AM_DMX_FreeFilter( DMX_DEV_NO, g_ecm_filter[bFilterId].i_fid );
+        am_dmx_stop_filter( bFilterId, g_ecm_filter[bFilterId].i_fid );
+        am_dmx_free_filter( bFilterId, g_ecm_filter[bFilterId].i_fid );
         g_ecm_filter[bFilterId].b_initialized = -1;
         pthread_mutex_unlock( &g_ecm_filter[bFilterId].lock );
         return k_BcSuccess;
@@ -516,12 +396,12 @@ int16_t  FS_SetECMFilter( uint8_t bFilterId, enFilterMode_t mode, uint16_t wEcmP
         if ( g_ecm_filter[bFilterId].b_initialized == 1 ) {
             CA_DEBUG( 1, "%s this filter already set, disable it first", __FUNCTION__ );
             AM_FlushECM_Buffer( bFilterId );
-            AM_DMX_StopFilter( DMX_DEV_NO, g_ecm_filter[bFilterId].i_fid );
-            AM_DMX_FreeFilter( DMX_DEV_NO, g_ecm_filter[bFilterId].i_fid );
+            am_dmx_stop_filter( bFilterId, g_ecm_filter[bFilterId].i_fid );
+            am_dmx_free_filter( bFilterId, g_ecm_filter[bFilterId].i_fid );
         }
-        AM_DMX_AllocateFilter( DMX_DEV_NO, &g_ecm_filter[bFilterId].i_fid );
+        am_dmx_alloc_filter( bFilterId, &g_ecm_filter[bFilterId].i_fid );
         CA_DEBUG(1, "pageSearch alloc filterID:%d\n", g_ecm_filter[bFilterId].i_fid);
-        AM_DMX_SetCallback( DMX_DEV_NO, g_ecm_filter[bFilterId].i_fid, am_ecm_callback, &g_ecm_filter[bFilterId] );
+        am_dmx_set_callback( bFilterId, g_ecm_filter[bFilterId].i_fid, am_ecm_callback, &g_ecm_filter[bFilterId] );
         memset( &param, 0, sizeof( param ) );
         param.pid = wEcmPid;
 
@@ -531,9 +411,9 @@ int16_t  FS_SetECMFilter( uint8_t bFilterId, enFilterMode_t mode, uint16_t wEcmP
 
         //param.flags = DMX_CHECK_CRC;
 
-        AM_DMX_SetSecFilter( DMX_DEV_NO, g_ecm_filter[bFilterId].i_fid, &param );
-        AM_DMX_SetBufferSize( DMX_DEV_NO, g_ecm_filter[bFilterId].i_fid, 32 * 1024 );
-        AM_DMX_StartFilter( DMX_DEV_NO, g_ecm_filter[bFilterId].i_fid );
+        am_dmx_set_sec_filter( bFilterId, g_ecm_filter[bFilterId].i_fid, &param );
+        am_dmx_set_buffer_size( bFilterId, g_ecm_filter[bFilterId].i_fid, 32 * 1024 );
+        am_dmx_start_filter( bFilterId, g_ecm_filter[bFilterId].i_fid );
         g_ecm_filter[bFilterId].i_version = 0xFF;
         g_ecm_filter[bFilterId].e_filter_mode = k_PageSearch;
         g_ecm_filter[bFilterId].b_initialized = 1;
@@ -544,12 +424,12 @@ int16_t  FS_SetECMFilter( uint8_t bFilterId, enFilterMode_t mode, uint16_t wEcmP
         if ( g_ecm_filter[bFilterId].b_initialized == 1 ) {
             CA_DEBUG( 0, "%s filter already initialized, disable it first", __FUNCTION__ );
             AM_FlushECM_Buffer( bFilterId );
-            AM_DMX_StopFilter( DMX_DEV_NO, g_ecm_filter[bFilterId].i_fid );
-            AM_DMX_FreeFilter( DMX_DEV_NO, g_ecm_filter[bFilterId].i_fid );
+            am_dmx_stop_filter( bFilterId, g_ecm_filter[bFilterId].i_fid );
+            am_dmx_free_filter( bFilterId, g_ecm_filter[bFilterId].i_fid );
         }
-        AM_DMX_AllocateFilter( DMX_DEV_NO, &g_ecm_filter[bFilterId].i_fid );
+        am_dmx_alloc_filter( bFilterId, &g_ecm_filter[bFilterId].i_fid );
         CA_DEBUG(1, "pageLock alloc filterID:%d\n", g_ecm_filter[bFilterId].i_fid);
-        AM_DMX_SetCallback( DMX_DEV_NO, g_ecm_filter[bFilterId].i_fid, am_ecm_callback, &g_ecm_filter[bFilterId] );
+        am_dmx_set_callback( bFilterId, g_ecm_filter[bFilterId].i_fid, am_ecm_callback, &g_ecm_filter[bFilterId] );
         memset( &param, 0, sizeof( param ) );
         param.pid = wEcmPid;
 
@@ -557,9 +437,9 @@ int16_t  FS_SetECMFilter( uint8_t bFilterId, enFilterMode_t mode, uint16_t wEcmP
         param.filter.mask[0] = 0xfe;
 
 
-        AM_DMX_SetSecFilter( DMX_DEV_NO, g_ecm_filter[bFilterId].i_fid, &param );
-        AM_DMX_SetBufferSize( DMX_DEV_NO, g_ecm_filter[bFilterId].i_fid, 32 * 1024 );
-        AM_DMX_StartFilter( DMX_DEV_NO, g_ecm_filter[bFilterId].i_fid );
+        am_dmx_set_sec_filter( bFilterId, g_ecm_filter[bFilterId].i_fid, &param );
+        am_dmx_set_buffer_size( bFilterId, g_ecm_filter[bFilterId].i_fid, 32 * 1024 );
+        am_dmx_start_filter( bFilterId, g_ecm_filter[bFilterId].i_fid );
         g_ecm_filter[bFilterId].e_filter_mode = k_PageLocked;
         g_ecm_filter[bFilterId].i_table_id = bTableId;
         g_ecm_filter[bFilterId].i_version = bVersion;
@@ -712,15 +592,15 @@ int16_t  FS_SetEMM_Pid( uint16_t wEmmPid )
     if ( wEmmPid == 0x1FFF ) {
         CA_DEBUG( 1, "%s, pid is invalid, stop ; fid/cur %d %d", __FUNCTION__, g_emm_filter.i_fid, g_emm_filter.i_emm_pid );
         if (g_emm_filter.i_fid != -1) {
-            AM_DMX_StopFilter( DMX_DEV_NO, g_emm_filter.i_fid );
-            AM_DMX_FreeFilter( DMX_DEV_NO, g_emm_filter.i_fid );
+            am_dmx_stop_filter( DMX_DEV_NO, g_emm_filter.i_fid );
+            am_dmx_free_filter( DMX_DEV_NO, g_emm_filter.i_fid );
         }
         g_emm_filter.i_emm_pid = wEmmPid;
         return k_BcSuccess;
     }
     g_emm_filter.i_emm_pid = wEmmPid;
-    AM_DMX_AllocateFilter( DMX_DEV_NO, &g_emm_filter.i_fid );
-    AM_DMX_SetCallback( DMX_DEV_NO, g_emm_filter.i_fid, am_emm_callback, &g_emm_filter );
+    am_dmx_alloc_filter( DMX_DEV_NO, &g_emm_filter.i_fid );
+    am_dmx_set_callback( DMX_DEV_NO, g_emm_filter.i_fid, am_emm_callback, &g_emm_filter );
     CA_DEBUG(2, "%s alloc emm filter fid=%d\n", __FUNCTION__, g_emm_filter.i_fid);
     memset( &param, 0, sizeof( param ) );
     param.pid = wEmmPid;
@@ -729,9 +609,9 @@ int16_t  FS_SetEMM_Pid( uint16_t wEmmPid )
 
     //param.flags = DMX_CHECK_CRC;
 
-    AM_DMX_SetSecFilter( DMX_DEV_NO, g_emm_filter.i_fid, &param );
-    AM_DMX_SetBufferSize( DMX_DEV_NO, g_emm_filter.i_fid, 512 * 1024 );
-    AM_DMX_StartFilter( DMX_DEV_NO, g_emm_filter.i_fid );
+    am_dmx_set_sec_filter( DMX_DEV_NO, g_emm_filter.i_fid, &param );
+    am_dmx_set_buffer_size( DMX_DEV_NO, g_emm_filter.i_fid, 512 * 1024 );
+    am_dmx_start_filter( DMX_DEV_NO, g_emm_filter.i_fid );
     return k_BcSuccess;
 }
 
@@ -822,36 +702,6 @@ int16_t  MMI_SetSmartcard_State( enScState_t state )
 int16_t  SC_Write( uint8_t *pabBuffer, uint16_t *pwLen, uint16_t wTimeout )
 {
     CA_DEBUG( 3, "===>>in SC_Write, len:%d,timeout:%d buffer is :", *pwLen, wTimeout );
-    int len = *pwLen;
-    int index = 0;
-    int i, edc_len;
-    while ( index < len ) {
-        //CA_DEBUG( 0, "     %#x", pabBuffer[index] );
-        index++;
-    }
-    pthread_mutex_lock( &g_smc_info.lock );
-    memset( g_smc_info.i_write_buf, 0, sizeof( g_smc_info.i_write_buf ) );
-    g_smc_info.i_write_buf[0] = 0;
-    g_smc_info.i_write_buf[1] = 0;
-    g_smc_info.i_write_buf[2] = *pwLen;
-    memcpy( g_smc_info.i_write_buf + 3, pabBuffer, *pwLen );
-
-    uint8_t edc = g_smc_info.i_write_buf[0];;
-    i = 1;
-    edc_len = *pwLen + 3;
-    while ( i < edc_len ) {
-        edc = edc ^ g_smc_info.i_write_buf[i];
-        i++;
-    }
-    CA_DEBUG( 3, "###### SC_Write edc :%#x\n", edc );
-    g_smc_info.i_write_buf[edc_len] = edc;
-    g_smc_info.i_write_len = edc_len + 1;
-
-    g_smc_info.i_cmd = SMC_WRITE_CMD;
-    g_smc_info.b_status = SMC_RW_INIT;
-    g_smc_info.i_timeout = wTimeout;
-    pthread_cond_signal( &g_smc_info.cond );
-    pthread_mutex_unlock( &g_smc_info.lock );
     CA_DEBUG( 3, "===>>out SC_Write" );
     return k_BcSuccess;
 }
@@ -863,21 +713,6 @@ int16_t  SC_Read( uint8_t *pabBuffer, uint16_t *pwLen )
         CA_DEBUG( 1, "%s, param buf is null", __FUNCTION__ );
         return k_BcError;
     }
-    pthread_mutex_lock( &g_smc_info.lock );
-    CA_DEBUG( 3, "===>>in SC_Read, smc_status:%d", g_smc_info.b_status );
-    if ( g_smc_info.b_status != SMC_READ_COMPLETED ) {
-        CA_DEBUG( 3, "===>>out SC_Read, smc read not compelted, return error" );
-        pthread_mutex_unlock( &g_smc_info.lock );
-        return k_BcError;
-    }
-    CA_DEBUG( 3, "read completed, copy data, len:%d", g_smc_info.i_read_len );
-    memcpy( pabBuffer, g_smc_info.i_read_buf, g_smc_info.i_read_len );
-    *pwLen = g_smc_info.i_read_len;
-    //g_smc_info.p_read_buf = pabBuffer;
-    //g_smc_info.i_read_len = *pwLen;
-    //g_smc_info.i_cmd = SMC_READ_CMD;
-    //pthread_cond_signal(&g_smc_info.cond);
-    pthread_mutex_unlock( &g_smc_info.lock );
     CA_DEBUG( 3, "===>>out SC_Read, write is completed ,return sucess len:%d", *pwLen );
     return k_BcSuccess;
 }
@@ -885,59 +720,24 @@ int16_t  SC_Read( uint8_t *pabBuffer, uint16_t *pwLen )
 int16_t  SC_IOCTL( enCmd_t cmd, void_t *pvParams, uint16_t *pwLen )
 {
 
-    AM_SMC_CardStatus_t status;
     switch ( cmd ) {
     case k_ConnectSc:
         CA_DEBUG( 2, "@@call %s cmd:k_ConnectSc", __FUNCTION__ );
         am_smc_notify = pvParams;
-        AM_SMC_GetCardStatus( SMC_DEV_NO, &status );
-        if ( 0 ) { //am_smc_notify ) {
-            if ( status == AM_SMC_CARD_OUT ) {
-                CA_DEBUG( 2, "cmd k_ConnectSc, smc status is : out" );
-                am_smc_notify( BC_SC_REMOVED );
-            } else if ( status == AM_SMC_CARD_IN ) {
-                CA_DEBUG( 2, "cmd k_ConnectSc, smc status is : in" );
-                am_smc_notify( BC_SC_INSERTED );
-            }
-        }
         break;
     case k_DisconnectSc:
         CA_DEBUG( 2, "@@call %s cmd:k_DisconnectSc", __FUNCTION__ );
         am_smc_notify = NULL;
-
         break;
     case k_ResetSc:
         CA_DEBUG( 2, "@@call %s cmd:k_ResetSc", __FUNCTION__ );
-        g_smc_info.i_atr_len = 33;
-        memset( g_smc_info.i_atr_buf, 0 , sizeof( g_smc_info.i_atr_buf ) );
-        AM_SMC_Reset( SMC_DEV_NO, g_smc_info.i_atr_buf, &g_smc_info.i_atr_len );
-        CA_DEBUG( 3, "smc get reset len:%d, data:", g_smc_info.i_atr_len );
-        int i = 0;
-        for ( i = 0; i < g_smc_info.i_atr_len; i++ ) {
-            CA_DEBUG( 3, "%#x", g_smc_info.i_atr_buf[i] );
-        }
-        AM_SMC_GetCardStatus( SMC_DEV_NO, &status );
-        if ( status == AM_SMC_CARD_IN ) {
-            am_smc_notify( BC_SC_RESET );
-        }
         break;
     case k_GetATRSc:
         CA_DEBUG( 2, "@@call %s cmd:k_GetATRSc", __FUNCTION__ );
-        memcpy( ( uint8_t * ) pvParams, g_smc_info.i_atr_buf , g_smc_info.i_atr_len );
-        *pwLen = g_smc_info.i_atr_len;
         break;
     case k_CardDetectSc:
         CA_DEBUG( 2, "@@call %s cmd:k_CardDetectSc", __FUNCTION__ );
-        AM_SMC_GetCardStatus( SMC_DEV_NO, &status );
-
-        if ( status == AM_SMC_CARD_OUT ) {
-            CA_DEBUG( 2, "cmd k_CardDetectSc, smc status is : out" );
-            am_smc_notify( BC_SC_REMOVED );
-        } else if ( status == AM_SMC_CARD_IN ) {
-            CA_DEBUG( 2, "cmd k_CardDetectSc, smc status is : in" );
-            am_smc_notify( BC_SC_INSERTED );
-        }
-
+        am_smc_notify( BC_SC_REMOVED );
         break;
     default:
         CA_DEBUG( 1, "@@call %s, unsupport cmd", __FUNCTION__ );
@@ -1003,7 +803,7 @@ int16_t  SYS_WriteNvmBlock( uint8_t *pabSrc, uint16_t wLength )
     fp = fopen( AM_NVM_FILE, "wb" );
     if ( !fp ) {
         CA_DEBUG( 2, "cannot open %d" , __LINE__);
-        return AM_FAILURE;
+        return k_BcError;
     }
     ret = fwrite( pabSrc, 1, wLength, fp );
     fclose( fp );
@@ -1069,7 +869,7 @@ int16_t  SYS_WriteNvmData( uint8_t bBlockId, uint8_t *pabSrc, uint16_t wLength )
     fp = fopen( fname, "wb" );
     if ( !fp ) {
         CA_DEBUG( 2, "cannot open %d" , __LINE__);
-        return AM_FAILURE;
+        return k_BcError;
     }
     ret = fwrite( pabSrc, 1, wLength, fp );
     fclose( fp );
