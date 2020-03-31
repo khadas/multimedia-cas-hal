@@ -8,9 +8,6 @@ LOCAL_C_INCLUDES := \
 		$(LOCAL_PATH) \
 		$(LOCAL_PATH)/../includes.dir \
 		$(LOCAL_PATH)/../libamcas \
-		vendor/amlogic/common/external/dvb/include/am_adp \
-		vendor/amlogic/common/external/dvb/android/ndk/include \
-		vendor/amlogic/common/external/dvb/android/ndk/include/linux \
 		system/media/audio/include \
 		frameworks/av/include \
 		hardware/amlogic/media/amcodec/include \
@@ -22,10 +19,10 @@ LOCAL_STATIC_LIBRARIES += \
   libcaclientapi \
   libam_cas \
   libvmx_dvb \
-  libvmx_ree_dual \
+  libvmx_ree_dual_aml \
   libcaclientapi
 
-LOCAL_STATIC_LIBRARIES += libam_mw libam_adp libcutils
+LOCAL_STATIC_LIBRARIES += libcutils
 
 
 	
@@ -35,7 +32,7 @@ LOCAL_MODULE:= cas_hal_test
 
 #LOCAL_PROPRIETARY_MODULE := true
 
-include $(BUILD_EXECUTABLE)
+#include $(BUILD_EXECUTABLE)
 
 
   

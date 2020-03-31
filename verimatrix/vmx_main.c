@@ -850,6 +850,13 @@ static int vmx_dvr_replay(CasSession session, AM_CA_StoreInfo_t *storeInfo, AM_C
     if (rc != k_BcSuccess) {
 	CA_DEBUG(0, "BC_DVRReplay failed, rc = %d", rc);
 	free_dvr_channelid(private_data->dvr_channelid);
+#ifdef USE_SECMEM //for secmem lib
+	if (private_data->secmem_session) {
+	    secmem_destroy_session(&private_data->secmem_session);
+	    private_data->secmem_session = NULL;
+	    private_data->secmem_buf = NULL;
+	}
+#endif
 	vmx_bc_unlock();
 	return -1;
     }
