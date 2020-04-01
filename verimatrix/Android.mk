@@ -35,6 +35,7 @@ LOCAL_C_INCLUDES := \
 LOCAL_SHARED_LIBRARIES += liblog \
   libcutils \
   libutils \
+  libsecmem_sys \
   libteec_sys
 
 LOCAL_STATIC_LIBRARIES += libvmx_ree_dual_aml \

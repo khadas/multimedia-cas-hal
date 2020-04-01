@@ -87,15 +87,11 @@ static int vmx_file_echo(const char *name, const char *cmd);
 
 static void *sec_mem_handle = NULL;
 /*Sec mem V2, open once session can only alloc once mem, no free API, close session will free it*/
-typedef uint32_t (*def_secmem_init_session)(void *session, uint32_t source,
+extern uint32_t Secure_V2_Init(void *session, uint32_t source,
   uint32_t flags, uint32_t paddr, uint32_t msize);
-typedef uint32_t (*def_secmem_create_session)(void **session);
-typedef uint32_t (*def_secmem_destroy_session)(void **session);
-typedef uint32_t (*def_secmem_alloc)(void *session, uint32_t *addr, uint32_t *size);
-static def_secmem_init_session secmem_init_session = NULL;
-static def_secmem_create_session secmem_create_session = NULL;
-static def_secmem_destroy_session secmem_destroy_session = NULL;
-static def_secmem_alloc secmem_alloc = NULL;
+extern uint32_t Secure_V2_SessionCreate(void **session);
+extern uint32_t Secure_V2_SessionDestroy(void **session);
+extern uint32_t Secure_V2_ResourceAlloc(void *session, uint32_t *addr, uint32_t *size);
 
 const struct AM_CA_Impl_t vmx_cas_ops =
 {
@@ -313,7 +309,6 @@ static int vmx_init(CasHandle handle)
 {
     uint8_t *buf = NULL;
     uint8_t tmp_buf[32] = {0};
-    static uint8_t *live_secmem_session = NULL;
     static uint8_t *dvr_secmem_session = NULL;
     uint32_t secmem_size = DVR_SIZE;
 
@@ -329,62 +324,19 @@ static int vmx_init(CasHandle handle)
     }
     ((CAS_CasInfo_t *)handle)->secure_buf = buf;
 
-    sec_mem_handle = dlopen("libsecmem.so", RTLD_NOW);
-    if (!sec_mem_handle) {
-        CA_DEBUG(0, "%s, failed to open libsecmem %s\n", __func__, dlerror());
-        return -1;
-    } else {
-        CA_DEBUG(0, "%s, open lib secmem success\n", __func__);
-
-        secmem_init_session = (def_secmem_init_session)dlsym(sec_mem_handle, "Secure_V2_Init");
-        if (!secmem_init_session) {
-            CA_DEBUG(0, "%s, failed to get secmem_init_session\n", __func__);
-            dlclose(sec_mem_handle);
-            return -1;
-        }
-        secmem_create_session = (def_secmem_create_session)dlsym(sec_mem_handle, "Secure_V2_SessionCreate");
-        if (!secmem_create_session) {
-            CA_DEBUG(0, "%s, failed to get secmem_create_session\n", __func__);
-            dlclose(sec_mem_handle);
-            return -1;
-        }
-        secmem_destroy_session = (def_secmem_destroy_session)dlsym(sec_mem_handle, "Secure_V2_SessionDestroy");
-        if (!secmem_destroy_session) {
-            CA_DEBUG(0, "%s, failed to get secmem_destroy_session\n", __func__);
-            dlclose(sec_mem_handle);
-            return -1;
-        }
-        secmem_alloc = (def_secmem_alloc)dlsym(sec_mem_handle, "Secure_V2_ResourceAlloc");
-        if (!secmem_alloc) {
-            CA_DEBUG(0, "%s, failed to get secmem_alloc\n", __func__);
-            dlclose(sec_mem_handle);
-            return -1;
-        }
-        CA_DEBUG(0, "%s, secmem Init success\n", __func__);
-    }
-
-    //to protect vdec buffer
-    if (secmem_create_session(&live_secmem_session)){
-	CA_DEBUG(0, "Create basic secmem session failed.");
-    } else {
-	if (secmem_init_session(live_secmem_session, SECMEM_SOURCE_VDEC, 0x1, 0, 0)) {
-	    CA_DEBUG(0, "Init basic secmem session failed.");
-	}
-    }
-
     //to alloc secmem for asyncfifo buffer
-    if (secmem_create_session(&dvr_secmem_session)) {
+    if (Secure_V2_SessionCreate(&dvr_secmem_session)) {
 	CA_DEBUG(0, "Create dvr secmem session failed.");
 	return -1;
     }
-    if (secmem_init_session(dvr_secmem_session, SECMEM_SOURCE_VDEC, 0x100, 0, 0)) {
+    if (Secure_V2_Init(dvr_secmem_session, SECMEM_SOURCE_VDEC, 0x100, 0, 0)) {
 	CA_DEBUG(0, "Init dvr secmem session failed");
-	secmem_destroy_session(&dvr_secmem_session);
+	Secure_V2_SessionDestroy(&dvr_secmem_session);
 	return -1;
     }
-    if (secmem_alloc(dvr_secmem_session, &buf, &secmem_size)) {
+    if (Secure_V2_ResourceAlloc(dvr_secmem_session, &buf, &secmem_size)) {
 	CA_DEBUG(0, "Alloc dvr secmem buffer failed");
-	secmem_destroy_session(&dvr_secmem_session);
+	Secure_V2_SessionDestroy(&dvr_secmem_session);
 	return -1;
     }
 
@@ -792,20 +744,20 @@ static int vmx_dvr_replay(CasSession session, AM_CA_StoreInfo_t *storeInfo, AM_C
 
 #ifdef USE_SECMEM //for secmem lib
     //to alloc secmem for decryption output buffer
-    if (secmem_create_session(&secmem_session)) {
+    if (Secure_V2_SessionCreate(&secmem_session)) {
 	CA_DEBUG(0, "Create decryption secmem session failed.");
 	vmx_bc_unlock();
 	return -1;
     }
-    if (secmem_init_session(secmem_session, SECMEM_SOURCE_VDEC, 0x101, 0, 0)) {
+    if (Secure_V2_Init(secmem_session, SECMEM_SOURCE_VDEC, 0x101, 0, 0)) {
 	CA_DEBUG(0, "Init decryption secmem session failed");
-	secmem_destroy_session(&secmem_session);
+	Secure_V2_SessionDestroy(&secmem_session);
 	vmx_bc_unlock();
 	return -1;
     }
-    if (secmem_alloc(secmem_session, &buf, &secmem_size)) {
+    if (Secure_V2_ResourceAlloc(secmem_session, &buf, &secmem_size)) {
 	CA_DEBUG(0, "Alloc decryption secmem buffer failed");
-	secmem_destroy_session(&secmem_session);
+	Secure_V2_SessionDestroy(&secmem_session);
 	vmx_bc_unlock();
 	return -1;
     }
@@ -852,7 +804,7 @@ static int vmx_dvr_replay(CasSession session, AM_CA_StoreInfo_t *storeInfo, AM_C
 	free_dvr_channelid(private_data->dvr_channelid);
 #ifdef USE_SECMEM //for secmem lib
 	if (private_data->secmem_session) {
-	    secmem_destroy_session(&private_data->secmem_session);
+	    Secure_V2_SessionDestroy(&private_data->secmem_session);
 	    private_data->secmem_session = NULL;
 	    private_data->secmem_buf = NULL;
 	}
@@ -890,7 +842,7 @@ static int vmx_dvr_stop_replay(CasSession session)
 
 #ifdef USE_SECMEM //for secmem lib
     if (private_data->secmem_session) {
-	secmem_destroy_session(&private_data->secmem_session);
+	Secure_V2_SessionDestroy(&private_data->secmem_session);
 	private_data->secmem_session = NULL;
 	private_data->secmem_buf = NULL;
     }
