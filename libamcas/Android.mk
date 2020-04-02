@@ -20,20 +20,18 @@ LOCAL_MODULE := libam_cas
 LOCAL_MULTILIB := 32
 LOCAL_ARM_MODE := arm
 LOCAL_SRC_FILES := \
-    am_cas.c
+    src/am_cas.c
 
 LOCAL_C_INCLUDES := \
-		$(LOCAL_PATH) \
-		$(LOCAL_PATH)/../verimatrix \
+		$(LOCAL_PATH)/include
 
 LOCAL_SHARED_LIBRARIES += liblog\
   libcutils \
-  libutils \
+  libutils
 
 LOCAL_CFLAGS += -O0
 
 #LOCAL_PROPRIETARY_MODULE := true
 LOCAL_PRODUCT_MODULE := true
 
-#include $(BUILD_SHARED_LIBRARY)
 include $(BUILD_STATIC_LIBRARY)

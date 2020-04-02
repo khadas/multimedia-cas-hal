@@ -168,18 +168,12 @@ static dvb_dmx_filter_t* get_filter(int dev_no, int fhandle)
     return &g_dvb_dmx.filter[fhandle];
 }
 
-int am_dmx_init(int dev_no)
+int am_dmx_init(void)
 {
-    if (dev_no >= DMX_COUNT)
-    {
-	CA_DEBUG(1, "init failed, wrong dmx device no %d", dev_no);
-	return -1;
-    }
-
     if (g_dvb_dmx.running)
     {
-	CA_DEBUG(1, "dmx%d already initialized", dev_no);
-	return -1;
+	    CA_DEBUG(1, "dmx already initialized");
+	    return -1;
     }
 
     memset(&g_dvb_dmx, 0, sizeof(dvb_dmx_t));

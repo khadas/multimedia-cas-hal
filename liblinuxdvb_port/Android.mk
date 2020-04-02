@@ -25,7 +25,7 @@ LOCAL_SRC_FILES := \
 LOCAL_C_INCLUDES := \
 		$(LOCAL_PATH) \
 		$(LOCAL_PATH)/include \
-		$(LOCAL_PATH)/../libamcas \
+		$(LOCAL_PATH)/../libamcas/include \
 
 
 LOCAL_SHARED_LIBRARIES += liblog\

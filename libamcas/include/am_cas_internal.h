@@ -28,7 +28,6 @@
 #define _AM_CAS_INTERNAL_H
 
 typedef struct {
-   uint8_t *secure_buf;
    void *private_data;
 }CAS_CasInfo_t;
 
@@ -70,11 +69,11 @@ struct AM_CA_Impl_t
     int (*update_descrambling_pid)(CasSession session, uint16_t oldStreamPid, uint16_t newStreamPid);
     int (*stop_descrambling)(CasSession session);
     int (*set_emm_pid)(CasHandle handle, uint16_t emmPid);
-    int (*dvr_start)(CasSession session, AM_CA_ServiceInfo_t *service_info, AM_CA_PrivateInfo_t *info);
+    int (*dvr_start)(CasSession session, AM_CA_ServiceInfo_t *service_info);
     int (*dvr_stop)(CasSession session);
-    int (*dvr_encrypt)(CasSession session, AM_CA_CryptoPara_t *cryptoPara, AM_CA_StoreInfo_t *storeInfo);
+    int (*dvr_encrypt)(CasSession session, AM_CA_CryptoPara_t *cryptoPara);
     int (*dvr_decrypt)(CasSession session, AM_CA_CryptoPara_t *cryptoPara);
-    int (*dvr_replay)(CasSession session, AM_CA_StoreInfo_t *storeInfo, AM_CA_PrivateInfo_t *info);
+    int (*dvr_replay)(CasSession session, AM_CA_CryptoPara_t *cryptoPara);
     int (*dvr_stop_replay)(CasSession session);
     int (*get_securebuf)(uint8_t **buf, uint32_t len);
 };

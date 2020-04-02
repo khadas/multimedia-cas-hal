@@ -34,7 +34,7 @@
                                   }
 #define MAX_CHAN_COUNT (8)
 #define MAX_DATA_LEN (8)
-#define MAX_STOREINFO_LEN (1024)
+#define MAX_LOCATION_SIZE     512
 
 typedef unsigned int uint32_t;
 typedef unsigned short int uint16_t;
@@ -52,6 +52,25 @@ typedef enum {
 	SERVICE_DVR
 }CA_SERVICE_TYPE_t;
 
+/**Work type.*/
+typedef enum {
+    CRYPTO_TYPE_ENCRYPT, /**< Encrypt.*/
+    CRYPTO_TYPE_DECRYPT  /**< Decrypt.*/
+} CAS_CryptoType_t;
+
+/**Buffer type.*/
+typedef enum {
+    DVR_BUFFER_TYPE_NORMAL, /**< Normal buffer.*/
+    DVR_BUFFER_TYPE_SECURE  /**< Secure buffer.*/
+} DVR_BufferType_t;
+
+/**Stream buffer.*/
+typedef struct {
+    DVR_BufferType_t type; /**< Buffer type.*/
+    size_t           addr; /**< Start address of the buffer.*/
+    size_t           size; /**< Size of the buffer.*/ 
+} DVR_Buffer_t; 
+
 /**\brief Service descrambling information*/
 typedef struct {
 	uint16_t service_id;
@@ -66,25 +85,15 @@ typedef struct {
 	uint8_t ca_private_data_len;
 }AM_CA_ServiceInfo_t;
 
-/**\brief CAS private information*/
-typedef struct {
-	uint8_t info[16];
-	uint16_t infoLen;
-	void *reserved;
-}AM_CA_PrivateInfo_t;
-
-/**\brief CAS dvr information*/
-typedef struct {
-	uint8_t storeInfo[MAX_STOREINFO_LEN];
-	uint32_t actualStoreInfoLen;
-}AM_CA_StoreInfo_t;
-
 /**\brief CAS crypto parameters*/
-typedef struct {
-	uint8_t *buf_in;
-	uint8_t *buf_out;
-	uint32_t buf_len;
-	uint32_t buf_type;
+typedef struct AM_CA_CryptoPara_s {
+    CAS_CryptoType_t type;                       /**< Work type.*/
+    char        location[MAX_LOCATION_SIZE];     /**< Location of the record file.*/
+    int         segment_id;                      /**< Current segment's index.*/
+    loff_t      offset;                          /**< Current offset in the segment file.*/
+    DVR_Buffer_t buf_in;                        /**< Input data buffer.*/
+    DVR_Buffer_t buf_out;                       /**< Output data buffer.*/
+    size_t      buf_len;                         /**< Output data size in bytes.*/
 }AM_CA_CryptoPara_t;
 
 /**\brief Error code of the CAS-Hal module*/
@@ -180,11 +189,10 @@ AM_RESULT AM_CA_SetEmmPid(CasHandle handle, uint16_t emmPid);
  * \param session serviceInfo privateInfo
  * \param[in] session The opened session
  * \param[in] serviceInfo The service information for recording
- * \param[out] privateInfo The private data for extended use
  * \retval AM_SUCCESS On success
  * \return Error code
  */
-AM_RESULT AM_CA_DVRStart(CasSession session, AM_CA_ServiceInfo_t *serviceInfo, AM_CA_PrivateInfo_t *privateInfo);
+AM_RESULT AM_CA_DVRStart(CasSession session, AM_CA_ServiceInfo_t *serviceInfo);
 
 /**\brief Stop DVR for the specified session of the CA system
  * \param session
@@ -198,11 +206,10 @@ AM_RESULT AM_CA_DVRStop(CasSession session);
  * \param session cryptoPara storeInfo
  * \param[in] session The opened session
  * \param[in] cryptoPara The encrypt parameters
- * \param[out] storeInfo The returned decrypto key information
  * \retval AM_SUCCESS On success
  * \return Error code
  */
-AM_RESULT AM_CA_DVREncrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara, AM_CA_StoreInfo_t *storeInfo);
+AM_RESULT AM_CA_DVREncrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara);
 
 /**\brief Decrypt a buffer described by a AM_CA_CryptoPara_t struct
  * \param session cryptoPara
@@ -216,12 +223,11 @@ AM_RESULT AM_CA_DVRDecrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara);
 /**\brief Play recorded streams
  * \param session storeInfo privateInfo
  * \param[in] session The opened session
- * \param[in] storeInfo The decrypto key information
- * \param[in] privateInfo The private data for extended use
+ * \param[in] cryptoPara The decrypt parameters
  * \retval AM_SUCCESS On success
  * \return Error code
  */
-AM_RESULT AM_CA_DVRReplay(CasSession session, AM_CA_StoreInfo_t *storeInfo, AM_CA_PrivateInfo_t *privateInfo);
+AM_RESULT AM_CA_DVRReplay(CasSession session, AM_CA_CryptoPara_t *cryptoPara);
 
 /**\brief Stop DVR replay
  * \param session

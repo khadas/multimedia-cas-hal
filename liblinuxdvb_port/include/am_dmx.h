@@ -8,6 +8,7 @@ extern "C"
 
 typedef void (*am_dmx_data_cb) (int dev_no, int fd, const uint8_t *data, int len, void *user_data);
 
+int am_dmx_init(void);
 int am_dmx_alloc_filter(int dev_no, int *fhandle);
 int am_dmx_set_sec_filter(int dev_no, int fhandle, const struct dmx_sct_filter_params *params);
 int am_dmx_set_buffer_size(int dev_no, int fhandle, int size);

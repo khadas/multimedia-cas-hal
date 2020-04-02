@@ -86,7 +86,7 @@ uint8_t AM_CA_IsSystemIdSupported(int CA_system_id)
     if (cas_ops && cas_ops->isSystemIdSupported) {
 	return cas_ops->isSystemIdSupported(CA_system_id);
     }
-    return 1;
+    return 0;
 }
 
 /**\brief Instantiate a CA system of the specified system id
@@ -273,17 +273,16 @@ AM_RESULT AM_CA_SetEmmPid(CasHandle handle, uint16_t emmPid)
  * \param session serviceInfo privateInfo
  * \param[in] session The opened session
  * \param[in] serviceInfo The service information for recording
- * \param[in] privateInfo The private data for extended use
  * \retval AM_SUCCESS On success
  * \return Error code
  */
-AM_RESULT AM_CA_DVRStart(CasSession session, AM_CA_ServiceInfo_t *serviceInfo, AM_CA_PrivateInfo_t *privateInfo)
+AM_RESULT AM_CA_DVRStart(CasSession session, AM_CA_ServiceInfo_t *serviceInfo)
 {
     CAS_ASSERT(session);
     CAS_ASSERT(serviceInfo);
 
     if (cas_ops && cas_ops->dvr_start) {
-	return cas_ops->dvr_start(session, serviceInfo, privateInfo);
+	return cas_ops->dvr_start(session, serviceInfo);
     }
 
     return AM_ERROR_NOT_LOAD;
@@ -307,20 +306,18 @@ AM_RESULT AM_CA_DVRStop(CasSession session)
 }
 
 /**\brief Encrypt a buffer described by a AM_CA_CryptoPara_t struct
- * \param session cryptoPara storeInfo
  * \param[in] session The opened session
  * \param[in] cryptoPara The encrypt parameters
- * \param[out] storeInfo The returned decrypto key information
  * \retval AM_SUCCESS On success
  * \return Error code
  */
-AM_RESULT AM_CA_DVREncrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara, AM_CA_StoreInfo_t *storeInfo)
+AM_RESULT AM_CA_DVREncrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 {
     CAS_ASSERT(session);
     CAS_ASSERT(cryptoPara);
 
     if (cas_ops && cas_ops->dvr_encrypt) {
-	return cas_ops->dvr_encrypt(session, cryptoPara, storeInfo);
+	return cas_ops->dvr_encrypt(session, cryptoPara);
     }
 
     return AM_ERROR_NOT_LOAD;
@@ -345,19 +342,18 @@ AM_RESULT AM_CA_DVRDecrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 }
 
 /**\brief Play recorded streams
- * \param session storeInfo privateInfo
  * \param[in] session The opened session
- * \param[in] storeInfo The decrypto key information
- * \param[in] privateInfo The private data for extended use
+ * \param[in] cryptoPara The decrypt parameters
  * \retval AM_SUCCESS On success
  * \return Error code
  */
-AM_RESULT AM_CA_DVRReplay(CasSession session, AM_CA_StoreInfo_t *storeInfo, AM_CA_PrivateInfo_t *privateInfo)
+AM_RESULT AM_CA_DVRReplay(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 {
     CAS_ASSERT(session);
+    CAS_ASSERT(cryptoPara);
 
     if (cas_ops && cas_ops->dvr_replay) {
-	return cas_ops->dvr_replay(session, storeInfo, privateInfo);
+	return cas_ops->dvr_replay(session, cryptoPara);
     }
 
     return AM_ERROR_NOT_LOAD;

@@ -8,6 +8,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <pthread.h>
 #include <linux/dvb/dmx.h>
 
 #include "am_dmx.h"
@@ -384,8 +385,8 @@ int16_t  FS_SetECMFilter( uint8_t bFilterId, enFilterMode_t mode, uint16_t wEcmP
         }
 
         AM_FlushECM_Buffer( bFilterId );
-        am_dmx_stop_filter( bFilterId, g_ecm_filter[bFilterId].i_fid );
-        am_dmx_free_filter( bFilterId, g_ecm_filter[bFilterId].i_fid );
+        am_dmx_stop_filter( 0, g_ecm_filter[bFilterId].i_fid );
+        am_dmx_free_filter( 0, g_ecm_filter[bFilterId].i_fid );
         g_ecm_filter[bFilterId].b_initialized = -1;
         pthread_mutex_unlock( &g_ecm_filter[bFilterId].lock );
         return k_BcSuccess;
@@ -396,12 +397,12 @@ int16_t  FS_SetECMFilter( uint8_t bFilterId, enFilterMode_t mode, uint16_t wEcmP
         if ( g_ecm_filter[bFilterId].b_initialized == 1 ) {
             CA_DEBUG( 1, "%s this filter already set, disable it first", __FUNCTION__ );
             AM_FlushECM_Buffer( bFilterId );
-            am_dmx_stop_filter( bFilterId, g_ecm_filter[bFilterId].i_fid );
-            am_dmx_free_filter( bFilterId, g_ecm_filter[bFilterId].i_fid );
+            am_dmx_stop_filter( 0, g_ecm_filter[bFilterId].i_fid );
+            am_dmx_free_filter( 0, g_ecm_filter[bFilterId].i_fid );
         }
-        am_dmx_alloc_filter( bFilterId, &g_ecm_filter[bFilterId].i_fid );
+        am_dmx_alloc_filter( 0, &g_ecm_filter[bFilterId].i_fid );
         CA_DEBUG(1, "pageSearch alloc filterID:%d\n", g_ecm_filter[bFilterId].i_fid);
-        am_dmx_set_callback( bFilterId, g_ecm_filter[bFilterId].i_fid, am_ecm_callback, &g_ecm_filter[bFilterId] );
+        am_dmx_set_callback( 0, g_ecm_filter[bFilterId].i_fid, am_ecm_callback, &g_ecm_filter[bFilterId] );
         memset( &param, 0, sizeof( param ) );
         param.pid = wEcmPid;
 
@@ -411,9 +412,9 @@ int16_t  FS_SetECMFilter( uint8_t bFilterId, enFilterMode_t mode, uint16_t wEcmP
 
         //param.flags = DMX_CHECK_CRC;
 
-        am_dmx_set_sec_filter( bFilterId, g_ecm_filter[bFilterId].i_fid, &param );
-        am_dmx_set_buffer_size( bFilterId, g_ecm_filter[bFilterId].i_fid, 32 * 1024 );
-        am_dmx_start_filter( bFilterId, g_ecm_filter[bFilterId].i_fid );
+        am_dmx_set_sec_filter( 0, g_ecm_filter[bFilterId].i_fid, &param );
+        am_dmx_set_buffer_size( 0, g_ecm_filter[bFilterId].i_fid, 32 * 1024 );
+        am_dmx_start_filter( 0, g_ecm_filter[bFilterId].i_fid );
         g_ecm_filter[bFilterId].i_version = 0xFF;
         g_ecm_filter[bFilterId].e_filter_mode = k_PageSearch;
         g_ecm_filter[bFilterId].b_initialized = 1;
@@ -424,12 +425,12 @@ int16_t  FS_SetECMFilter( uint8_t bFilterId, enFilterMode_t mode, uint16_t wEcmP
         if ( g_ecm_filter[bFilterId].b_initialized == 1 ) {
             CA_DEBUG( 0, "%s filter already initialized, disable it first", __FUNCTION__ );
             AM_FlushECM_Buffer( bFilterId );
-            am_dmx_stop_filter( bFilterId, g_ecm_filter[bFilterId].i_fid );
-            am_dmx_free_filter( bFilterId, g_ecm_filter[bFilterId].i_fid );
+            am_dmx_stop_filter( 0, g_ecm_filter[bFilterId].i_fid );
+            am_dmx_free_filter( 0, g_ecm_filter[bFilterId].i_fid );
         }
-        am_dmx_alloc_filter( bFilterId, &g_ecm_filter[bFilterId].i_fid );
+        am_dmx_alloc_filter( 0, &g_ecm_filter[bFilterId].i_fid );
         CA_DEBUG(1, "pageLock alloc filterID:%d\n", g_ecm_filter[bFilterId].i_fid);
-        am_dmx_set_callback( bFilterId, g_ecm_filter[bFilterId].i_fid, am_ecm_callback, &g_ecm_filter[bFilterId] );
+        am_dmx_set_callback( 0, g_ecm_filter[bFilterId].i_fid, am_ecm_callback, &g_ecm_filter[bFilterId] );
         memset( &param, 0, sizeof( param ) );
         param.pid = wEcmPid;
 
@@ -437,9 +438,9 @@ int16_t  FS_SetECMFilter( uint8_t bFilterId, enFilterMode_t mode, uint16_t wEcmP
         param.filter.mask[0] = 0xfe;
 
 
-        am_dmx_set_sec_filter( bFilterId, g_ecm_filter[bFilterId].i_fid, &param );
-        am_dmx_set_buffer_size( bFilterId, g_ecm_filter[bFilterId].i_fid, 32 * 1024 );
-        am_dmx_start_filter( bFilterId, g_ecm_filter[bFilterId].i_fid );
+        am_dmx_set_sec_filter( 0, g_ecm_filter[bFilterId].i_fid, &param );
+        am_dmx_set_buffer_size( 0, g_ecm_filter[bFilterId].i_fid, 32 * 1024 );
+        am_dmx_start_filter( 0, g_ecm_filter[bFilterId].i_fid );
         g_ecm_filter[bFilterId].e_filter_mode = k_PageLocked;
         g_ecm_filter[bFilterId].i_table_id = bTableId;
         g_ecm_filter[bFilterId].i_version = bVersion;

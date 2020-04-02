@@ -21,16 +21,13 @@ LOCAL_MODULE := libvmx_dvb
 LOCAL_MULTILIB := 32
 LOCAL_ARM_MODE := arm
 LOCAL_SRC_FILES := \
-    vmx_main.c \
-    vmx_porting.c
+    src/vmx_main.c \
+    src/vmx_porting.c
 
 LOCAL_C_INCLUDES := \
-		$(LOCAL_PATH) \
-		$(LOCAL_PATH)/../libamcas \
+		$(LOCAL_PATH)/include \
+		$(LOCAL_PATH)/../libamcas/include \
 		$(LOCAL_PATH)/../liblinuxdvb_port/include \
-		$(LOCAL_PATH)/../includes.dir \
-		$(LOCAL_PATH)/../libcaclientapi/include \
-		
 
 LOCAL_SHARED_LIBRARIES += liblog \
   libcutils \
@@ -49,5 +46,4 @@ LOCAL_CFLAGS += -O0 -DANDROID
 #LOCAL_PROPRIETARY_MODULE := true
 LOCAL_PRODUCT_MODULE := true
 
-#include $(BUILD_STATIC_LIBRARY) 
-include $(BUILD_SHARED_LIBRARY) 
+#include $(BUILD_SHARED_LIBRARY) 
