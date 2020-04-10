@@ -376,10 +376,37 @@ AM_RESULT AM_CA_DVRStopReplay(CasSession session)
     return AM_ERROR_NOT_LOAD;
 }
 
-AM_RESULT AM_CA_GetSecureBuffer(uint8_t **buf, uint32_t len) {
-    if (cas_ops && cas_ops->get_securebuf) {
-	return cas_ops->get_securebuf(buf, len);
+/**\brief Create Secmem
+ * \param type paddr size
+ * \param[in] type The binded service type
+ * \param[out] paddr The secure buffer address
+ * \param[out] size The secure buffer size
+ * \retval SecMemHandle On success
+ * \return NULL
+ */
+SecMemHandle AM_CA_CreateSecmem(CA_SERVICE_TYPE_t type, void **pSecBuf, uint32_t *size)
+{
+    if (cas_ops && cas_ops->create_secmem) {
+        return cas_ops->create_secmem(type, pSecBuf, size);
+    }
+
+    return (SecMemHandle)NULL;
+}
+
+/**\brief Destroy Secmem
+ * \param handle
+ * \param[in] handle The SecMem handle
+ * \retval AM_SUCCESS On success
+ * \return Error code
+ */
+AM_RESULT AM_CA_DestroySecmem(SecMemHandle handle)
+{
+    CAS_ASSERT(handle);
+
+    if (cas_ops && cas_ops->destroy_secmem) {
+        return cas_ops->destroy_secmem(handle);
     }
 
     return AM_ERROR_NOT_LOAD;
+
 }

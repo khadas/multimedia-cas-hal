@@ -75,7 +75,8 @@ struct AM_CA_Impl_t
     int (*dvr_decrypt)(CasSession session, AM_CA_CryptoPara_t *cryptoPara);
     int (*dvr_replay)(CasSession session, AM_CA_CryptoPara_t *cryptoPara);
     int (*dvr_stop_replay)(CasSession session);
-    int (*get_securebuf)(uint8_t **buf, uint32_t len);
+    SecMemHandle (*create_secmem)(CA_SERVICE_TYPE_t type, void **pSecBuf, uint32_t *size);
+    int (*destroy_secmem)(SecMemHandle handle);
 };
 
 #endif

@@ -48,28 +48,30 @@ typedef enum {
 
 /**\brief Service type of the program*/
 typedef enum {
-	SERVICE_PLAY,
-	SERVICE_DVR
+	SERVICE_LIVE_PLAY,
+	SERVICE_PVR_RECORDING,
+    SERVICE_PVR_PLAY,
+    SERVICE_TYPE_INVALID
 }CA_SERVICE_TYPE_t;
 
 /**Work type.*/
 typedef enum {
     CRYPTO_TYPE_ENCRYPT, /**< Encrypt.*/
     CRYPTO_TYPE_DECRYPT  /**< Decrypt.*/
-} CAS_CryptoType_t;
+} CA_CryptoType_t;
 
 /**Buffer type.*/
 typedef enum {
-    DVR_BUFFER_TYPE_NORMAL, /**< Normal buffer.*/
-    DVR_BUFFER_TYPE_SECURE  /**< Secure buffer.*/
-} DVR_BufferType_t;
+    BUFFER_TYPE_NORMAL, /**< Normal buffer.*/
+    BUFFER_TYPE_SECURE  /**< Secure buffer.*/
+} CA_DVR_BufferType_t;
 
 /**Stream buffer.*/
 typedef struct {
-    DVR_BufferType_t type; /**< Buffer type.*/
+    CA_DVR_BufferType_t type; /**< Buffer type.*/
     size_t           addr; /**< Start address of the buffer.*/
     size_t           size; /**< Size of the buffer.*/ 
-} DVR_Buffer_t; 
+} CA_DVR_Buffer_t; 
 
 /**\brief Service descrambling information*/
 typedef struct {
@@ -87,12 +89,12 @@ typedef struct {
 
 /**\brief CAS crypto parameters*/
 typedef struct AM_CA_CryptoPara_s {
-    CAS_CryptoType_t type;                       /**< Work type.*/
+    CA_CryptoType_t type;                       /**< Work type.*/
     char        location[MAX_LOCATION_SIZE];     /**< Location of the record file.*/
     int         segment_id;                      /**< Current segment's index.*/
     loff_t      offset;                          /**< Current offset in the segment file.*/
-    DVR_Buffer_t buf_in;                        /**< Input data buffer.*/
-    DVR_Buffer_t buf_out;                       /**< Output data buffer.*/
+    CA_DVR_Buffer_t buf_in;                        /**< Input data buffer.*/
+    CA_DVR_Buffer_t buf_out;                       /**< Output data buffer.*/
     size_t      buf_len;                         /**< Output data size in bytes.*/
 }AM_CA_CryptoPara_t;
 
@@ -105,6 +107,7 @@ typedef enum {
 	AM_ERROR_GENERAL_ERORR
 }AM_RESULT;
 
+typedef size_t SecMemHandle;
 typedef size_t CasHandle;
 typedef size_t CasSession;
 
@@ -236,4 +239,22 @@ AM_RESULT AM_CA_DVRReplay(CasSession session, AM_CA_CryptoPara_t *cryptoPara);
  * \return Error code
  */
 AM_RESULT AM_CA_DVRStopReplay(CasSession session);
+
+/**\brief Create Secmem
+ * \param type paddr size
+ * \param[in] type The binded service type
+ * \param[out] pSecBuf The secure buffer address
+ * \param[out] size The secure buffer size
+ * \retval SecMemHandle On success
+ * \return NULL
+ */
+SecMemHandle AM_CA_CreateSecmem(CA_SERVICE_TYPE_t type, void **pSecbuf, uint32_t *size);
+
+/**\brief Destroy Secmem
+ * \param handle
+ * \param[in] handle The SecMem handle
+ * \retval AM_SUCCESS On success
+ * \return Error code
+ */
+AM_RESULT AM_CA_DestroySecmem(SecMemHandle handle);
 #endif

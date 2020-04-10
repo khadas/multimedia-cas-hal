@@ -18,6 +18,7 @@
 #include <list.h>
 
 #include "bc_consts.h"
+#include "bc_main.h"
 #include "caclientapi.h"
 #include "am_cas.h"
 #include "am_cas_internal.h"
@@ -82,6 +83,11 @@ typedef struct {
     vmx_crypto_storeinfo_t storeinfo_ctx;
 }VMX_PrivateInfo_t;
 
+typedef struct {
+    void *session;
+    void *secbuf;
+}secmem_handle_t;
+
 struct AM_CA_Impl_t * get_cas_ops(void);
 static int vmx_pre_init(void);
 static int vmx_init(CasHandle handle);
@@ -99,7 +105,8 @@ static int vmx_dvr_encrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara);
 static int vmx_dvr_decrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara);
 static int vmx_dvr_replay(CasSession session, AM_CA_CryptoPara_t *cryptoPara);
 static int vmx_dvr_stop_replay(CasSession session);
-static int vmx_get_securebuf(uint8_t **buf, uint32_t len);
+static SecMemHandle vmx_create_secmem(CA_SERVICE_TYPE_t type, void **pSecBuf, uint32_t *size);
+static int vmx_destroy_secmem(SecMemHandle handle);
 static int vmx_file_echo(const char *name, const char *cmd);
 static int vmx_get_fname(char fname[MAX_LOCATION_SIZE],
     const char location[MAX_LOCATION_SIZE],
@@ -111,7 +118,11 @@ extern uint32_t Secure_V2_Init(void *session, uint32_t source,
 extern uint32_t Secure_V2_SessionCreate(void **session);
 extern uint32_t Secure_V2_SessionDestroy(void **session);
 extern uint32_t Secure_V2_ResourceAlloc(void *session, uint32_t *addr, uint32_t *size);
-extern uint32_t Secure_V2_ResourceFree(void *session);
+enum {
+    SECMEM_SOURCE_NONE = 0,
+    SECMEM_SOURCE_VDEC,
+    SECMEM_SOURCE_CODEC_MM
+};
 
 const struct AM_CA_Impl_t vmx_cas_ops =
 {
@@ -131,7 +142,8 @@ const struct AM_CA_Impl_t vmx_cas_ops =
 .dvr_decrypt = vmx_dvr_decrypt,
 .dvr_replay = vmx_dvr_replay,
 .dvr_stop_replay = vmx_dvr_stop_replay,
-.get_securebuf = vmx_get_securebuf
+.create_secmem = vmx_create_secmem,
+.destroy_secmem = vmx_destroy_secmem
 };
 
 static uint8_t *g_dvr_shm = NULL;
@@ -203,7 +215,7 @@ static int vmx_parser_storeinfo(FILE *dat_fp,
         if (fread(&infolen, sizeof(infolen), 1, dat_fp) != 1) {
             break;
         }
-        CA_DEBUG(0, "find vmx store info len:%#x, offset:%d",
+        CA_DEBUG(0, "find vmx store info len:%#x, offset:%lld",
                 infolen, offset);
         pstoreinfo = malloc(sizeof(vmx_crypto_storeinfo_t));
         pstoreinfo->info_data = malloc(infolen);
@@ -242,7 +254,7 @@ static int vmx_get_storeinfo(
             if (offset > pstoreinfo->start && offset <= pstoreinfo->end) {
                 sinfo->len = pstoreinfo->info_len;
                 memcpy(sinfo->info, pstoreinfo->info_data, pstoreinfo->info_len);
-                CA_DEBUG(0, "found store info, offset:%d, len:%#x",
+                CA_DEBUG(0, "found store info, offset:%lld, len:%#x",
                     pstoreinfo->start, pstoreinfo->info_len);
                 return 0;
             }
@@ -267,6 +279,43 @@ static int vmx_free_storeinfo(
     }
 
     return 0;
+}
+
+static int create_secmem(void **session, uint32_t secmemflag,
+        void **ppSecBuf, uint32_t size, uint32_t allocflag)
+{
+    if (Secure_V2_SessionCreate(session)) {
+        CA_DEBUG(0, "Create secmem session (%#x) failed", secmemflag);
+        return -1;
+    }
+
+    if (Secure_V2_Init(*session, SECMEM_SOURCE_VDEC, secmemflag, 0, 0)) {
+        Secure_V2_SessionDestroy(session);
+        CA_DEBUG(0, "Init secmem session(%#x) failed.", secmemflag);
+        return -1;
+    }
+
+    if (!allocflag) {
+        return 0;
+    }
+
+    if (Secure_V2_ResourceAlloc(*session, ppSecBuf, &size)) {
+        Secure_V2_SessionDestroy(session);
+        return -1;
+    }
+
+    return 0;
+}
+
+static int destroy_secmem(void **session)
+{
+    int ret = -1;
+
+    if (*session) {
+       ret =  Secure_V2_SessionDestroy(session);
+    }
+
+    return ret;
 }
 
 static int alloc_service_idx(void)
@@ -530,7 +579,7 @@ static int vmx_start_descrambling(CasSession session, AM_CA_ServiceInfo_t *servi
     }
 
     ca_svc_info.service_index = alloc_service_idx();
-    ca_svc_info.service_type = SERVICE_PLAY;
+    ca_svc_info.service_type = SERVICE_LIVE_PLAY;
     ca_svc_info.dsc_dev_no = serviceInfo->dsc_dev;
     ca_svc_info.dvr_dev_no = serviceInfo->dvr_dev;
     ca_svc_info.stream_num = serviceInfo->stream_num;
@@ -808,8 +857,6 @@ static int vmx_dvr_decrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
     VMX_PrivateInfo_t * private_data;
     vmx_crypto_storeinfo_t storeinfo;
 
-	CA_DEBUG(0, "%s line %d", __func__, __LINE__);
-
     if (cryptoPara->buf_len > DVR_SIZE) {
 	CA_DEBUG(2, "decrypt buffer overflow DVR_SIZE");
 	return -1;
@@ -836,6 +883,9 @@ static int vmx_dvr_decrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
     shm_out.type = SHM_R2R_TYPE_SEC;
     shm_out.paddr = (void *)cryptoPara->buf_out.addr;
     shm_out.size = cryptoPara->buf_out.size;
+
+    CA_DEBUG(0, "CAS DVR Decrypt[%d] (%#x, %#x, %#x)",
+		private_data->dvr_channelid, shm_in.paddr, shm_out.vaddr, shm_in.size);
 
     ree_shm_update_ree(shm_in.paddr, shm_in.size);
     rc = BC_DVRDecrypt(private_data->dvr_channelid,
@@ -967,6 +1017,65 @@ static int vmx_dvr_stop_replay(CasSession session)
     return 0;
 }
 
-static int vmx_get_securebuf(uint8_t **buf, uint32_t len) {
-    return CA_GetSecureBuffer(buf, len);
+static SecMemHandle vmx_create_secmem(CA_SERVICE_TYPE_t type, void **pSecBuf, uint32_t *size)
+{
+    uint32_t allocflag = 0;
+    uint32_t secmemflag = 0;
+    void *secbuf = NULL;
+    void *session = NULL;
+    secmem_handle_t *handle = NULL;
+
+    uint32_t bufsize = DVR_SIZE/2;
+
+    switch (type) {
+        case SERVICE_LIVE_PLAY:
+            allocflag = 0;
+            secmemflag = 0x2001;
+            break;
+
+        case SERVICE_PVR_RECORDING:
+            allocflag = 1;
+            secmemflag = 0x4000;
+            break;
+
+        case SERVICE_PVR_PLAY:
+            allocflag = 1;
+            secmemflag = 0x6001;
+            break;
+
+        default:
+            goto exit;
+    }
+
+    if (create_secmem(&session, secmemflag, &secbuf, bufsize, allocflag)) {
+        goto exit;
+    }
+
+    handle = (secmem_handle_t *)malloc(sizeof(secmem_handle_t));
+    if (!handle) {
+        destroy_secmem(&session);
+        goto exit;
+    }
+
+    handle->session = session;
+    handle->secbuf = secbuf;
+
+exit:
+    if (secbuf && pSecBuf) {
+        *pSecBuf = secbuf;
+        *size = bufsize;
+        return (SecMemHandle)handle;
+    }
+
+    return (SecMemHandle)NULL;
+}
+
+static int vmx_destroy_secmem(SecMemHandle handle)
+{
+    int ret;
+
+    ret =  destroy_secmem(&((secmem_handle_t *)handle)->session);
+    free((void *)handle);
+
+    return ret;
 }
