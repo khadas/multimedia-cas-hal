@@ -96,7 +96,10 @@ static void* dmx_data_thread(void *arg)
 	pthread_mutex_unlock(&g_dvb_dmx.lock);
 
 	if (!cnt)
+    {
+        usleep(20);
 	    continue;
+    }
 
 	ret = poll(fds, cnt, DMX_POLL_TIMEOUT);
 	if (ret <= 0)
