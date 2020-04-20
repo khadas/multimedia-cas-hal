@@ -882,10 +882,10 @@ static int vmx_dvr_decrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
     shm_out.magic = SHM_R2R_MAGIC;
     shm_out.type = SHM_R2R_TYPE_SEC;
     shm_out.paddr = (void *)cryptoPara->buf_out.addr;
-    shm_out.size = cryptoPara->buf_out.size;
+    shm_out.size = cryptoPara->buf_in.size;
 
     CA_DEBUG(0, "CAS DVR Decrypt[%d] (%#x, %#x, %#x)",
-		private_data->dvr_channelid, shm_in.paddr, shm_out.vaddr, shm_in.size);
+		private_data->dvr_channelid, shm_in.vaddr, shm_out.paddr, shm_in.size);
 
     ree_shm_update_ree(shm_in.paddr, shm_in.size);
     rc = BC_DVRDecrypt(private_data->dvr_channelid,
