@@ -29,7 +29,7 @@
 
 #define UNUSED(x) (x=x)
 #define CAS_ASSERT(expression)    if (!expression) { \
-                                        CA_DEBUG(2, "Null poiter. Line %d\n", __LINE__); \
+                                        CA_DEBUG(2, "%s, Null poiter. Line %d\n", __func__, __LINE__); \
                                         return AM_ERROR_GENERAL_ERORR; \
                                   }
 #define MAX_CHAN_COUNT (8)
@@ -76,6 +76,7 @@ typedef struct {
 /**\brief Service descrambling information*/
 typedef struct {
 	uint16_t service_id;
+	uint8_t dmx_dev;
 	uint8_t dsc_dev;
 	uint8_t dvr_dev;
 	CA_SERVICE_MODE_t service_mode;

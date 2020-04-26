@@ -44,6 +44,7 @@ typedef struct {
 
 typedef struct vmx_svc_idx {
     int used;
+    CasSession session;
 }vmx_svc_idx_t;
 
 typedef struct vmx_dvr_channelid {
@@ -70,6 +71,7 @@ typedef struct
 } vmx_crypto_storeinfo_t;
 
 typedef struct {
+    int dmx_dev;
     int service_index;
     int dsc_svc_handle;
     int dsc_chan_handle[MAX_CHAN_COUNT];
@@ -318,7 +320,7 @@ static int destroy_secmem(void **session)
     return ret;
 }
 
-static int alloc_service_idx(void)
+static int alloc_service_idx(CasSession session)
 {
     int i;
 
@@ -326,6 +328,7 @@ static int alloc_service_idx(void)
 	if (!g_svc_idx[i].used) {
 	    CA_DEBUG(0, "allocated vmx svc idx %d", i);
 	    g_svc_idx[i].used = 1;
+	    g_svc_idx[i].session = session;
 	    return i;
 	}
     }
@@ -342,11 +345,29 @@ static void free_service_idx(int idx)
 	if (g_svc_idx[i].used && (i == idx)) {
 	    CA_DEBUG(0, "freed vmx svc idx %d", i);
 	    g_svc_idx[i].used = 0;
+	    g_svc_idx[i].session = 0;
 	    return;
 	}
     }
 
     CA_DEBUG(0, "free vmx svc idx failed.");
+}
+
+int get_dmx_dev(int svc_idx)
+{
+    VMX_PrivateInfo_t *vmx_pri_info = NULL;
+
+    int i;
+
+    for (i = 0; i < MAX_CHAN_COUNT; i++) {
+        if (g_svc_idx[i].used && (i == svc_idx)) {
+            vmx_pri_info = ((CAS_SessionInfo_t *)g_svc_idx[i].session)->private_data;
+            return vmx_pri_info->dmx_dev;
+        }
+    }
+
+    CA_DEBUG(0, "svc idx[%d] not found", svc_idx);
+    return -1;
 }
 
 static int alloc_dvr_channelid(void)
@@ -578,13 +599,14 @@ static int vmx_start_descrambling(CasSession session, AM_CA_ServiceInfo_t *servi
 	ca_svc_info.pid[i] = serviceInfo->stream_pids[i];
     }
 
-    ca_svc_info.service_index = alloc_service_idx();
+    ca_svc_info.service_index = alloc_service_idx(session);
     ca_svc_info.service_type = SERVICE_LIVE_PLAY;
     ca_svc_info.dsc_dev_no = serviceInfo->dsc_dev;
     ca_svc_info.dvr_dev_no = serviceInfo->dvr_dev;
     ca_svc_info.stream_num = serviceInfo->stream_num;
     ca_svc_info.algo = SCRAMBLE_ALGO_CSA;
 
+    vmx_pri_info->dmx_dev = serviceInfo->dmx_dev;
     vmx_pri_info->service_index = ca_svc_info.service_index;
 
     p = serviceInfo->ca_private_data;
@@ -607,8 +629,8 @@ static int vmx_start_descrambling(CasSession session, AM_CA_ServiceInfo_t *servi
 	ecmPid[i] = serviceInfo->ecm_pid;
 	streamPid[i] = serviceInfo->stream_pids[i];
     }
-    CA_DEBUG(0, "Start Descrambling[%d] [%d %d %#x %#x %#x %d]", \
-		serviceInfo->dsc_dev, serviceInfo->service_id, serviceInfo->stream_num, \
+    CA_DEBUG(0, "Start Descrambling[%d] dmx%d [%d %d %#x %#x %#x %d]", \
+		serviceInfo->dsc_dev, vmx_pri_info->dmx_dev, serviceInfo->service_id, serviceInfo->stream_num, \
 		ecmPid[0], streamPid[0], streamPid[1], vmx_pri_info->service_index);
     BC_StartDescrambling(serviceInfo->service_id, serviceInfo->stream_num, \
 	&ecmPid[0], &streamPid[0], vmx_pri_info->service_index);
