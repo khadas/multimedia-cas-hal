@@ -1,3 +1,37 @@
+/**
+ * \page Test
+ * \section Introduction
+ * test code with CAS Hal APIs.
+ * It supports:
+ * \li Live
+ * \li Record
+ * \li Playback
+ * \li Timeshift
+ *
+ * \section Usage
+ *
+ * Help msg will be shown if the test runs without parameters.\n
+ * There are some general concepts for the parameters:
+ *
+ * For Live:
+ * \code
+ *   cas_hal_test <fend_dev_no> <prog_index>
+ * \endcode
+ * For playback:
+ * \code
+ *   dvr_wrapper_test <tsfile> <paused>
+ * \endcode
+ * the timeshift backgroud recording file will be located in /data/data as:
+ * \code
+ *   /data/data/timeshifting-xxxx.*
+ * \endcode
+ *
+ * \section FormatCode Format Code
+ *
+ * \li quit\n
+ *             quit the test
+ * \endsection
+ */
 #ifndef CA_DEBUG_LEVEL
 #define CA_DEBUG_LEVEL 2
 #endif
@@ -10,22 +44,28 @@
 #include <fcntl.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <byteswap.h>
 #include <signal.h>
 
-#include <am_debug.h>
-#include <am_fend.h>
-#include <am_dmx.h>
-#include <am_smc.h>
-#include <am_dsc.h>
-#include <am_av.h>
-#include <am_misc.h>
-#include <am_dvr.h>
+#include "AmTsPlayer.h"
+#include "dvr_segment.h"
+#include "dvr_wrapper.h"
+#include "am_fend.h"
+#include "am_dsc.h"
+
+#ifdef UNUSED
+#undef UNUSED
+#endif
 
 #include "am_cas.h"
+#include "cas_scan.h"
+
+#define INF(fmt, ...)       fprintf(stdout, fmt, ##__VA_ARGS__)
+#define ERR(fmt, ...)       fprintf(stderr, "error:" fmt, ##__VA_ARGS__)
 
 #define FEND_DEV_NO (0)
 #define DMX_DEV_NO (0)
+#define DMX_DEV_NO_2ND (1)
+#define DMX_DEV_NO_3RD (2)
 #define AV_DEV_NO (0)
 #define DSC_DEV_NO (0)
 #define DVR_DEV_NO (0)
@@ -34,292 +74,67 @@
 #define DVR_BUFFER_SIZE (512*1024)
 #define RECORD_BLOCK_SIZE (256*1024)//same to asyncfifo flush size, it's enc block size and dec block size//65424
 
-#define AML_INFODATA_MAGIC 0x0a31061c
-typedef struct __attribute__((__packed__)) aml_infodata_s {
-    uint32_t magic;
-    uint16_t vpid;
-    uint16_t apid;
-    uint16_t vfmt;
-    uint16_t afmt;
-} aml_infodata_t;
+#define DVR_STREAM_TYPE_TO_TYPE(_t) (((_t) >> 24) & 0xF)
+#define DVR_STREAM_TYPE_TO_FMT(_t)  ((_t) & 0xFFFFFF)
 
-typedef enum {
-    DEMOD_LOCK,
-    LIVE_PLAY,
-    DVR_RECORD,
-    DVR_PLAY,
-    INVALID_TYPE
-}CAS_WorkType_t;
+#define has_live(_m_)        ((_m_) & LIVE)
+#define has_playback(_m_)    ((_m_) & PLAYBACK)
+#define has_recording(_m_)   ((_m_) & RECORDING)
+#define is_live(_m_)         ((_m_) == LIVE)
+#define is_playback(_m_)     ((_m_) == PLAYBACK)
+#define is_timeshifting(_m_) ((_m_) == TIMESHIFTING)
 
-typedef struct {
-    int vpid;
-    int apid;
-    int vfmt;
-    int afmt;
-    int service_id;
-    int service_mode;
-    int ecm_pid;
-    int emm_pid;
-    int scrambled;
-}Program_Info_t;
+typedef struct
+{
+    CasSession cas_session;
+    SecMemHandle secmem_session;
+    void *dvr_session; //'DVR_WrapperPlayback_t *' or 'DVR_WrapperRecord_t *'
+    am_tsplayer_handle player_session;
+} CasTestSession;
 
-typedef struct {
-    uint8_t service_idx;
-    uint8_t dvrchannelid;
-    int tsfd;
-    int datfd;
-    int dumpfd;
-    uint64_t streampos;
-    int id;
-    pthread_t thread;
-    int running;
-    uint8_t *crypt_buf;
-} DVRData;
+static int mode = 0;
+static int duration=180000;
+static int size=1024*1024*1024;
+static char *pfilename = "/data/data/timeshifting.ts";
 
-static DVRData g_dvr_data = {0};
+enum {
+    LIVE        = 0x01,
+    PLAYBACK    = 0x02,
+    RECORDING   = 0x04,
+    TIMESHIFTING = PLAYBACK | RECORDING | 0x10,
+};
+
 static CasHandle g_cas_handle = 0;
-static CasSession g_cas_session = 0;
-static CAS_WorkType_t g_work_type = INVALID_TYPE;
+static CasTestSession play;
+static CasTestSession recorder;
 
-typedef struct {
-    unsigned int addr;
-    unsigned int len;
-}dvr_block;
-
-static void *dvr_record_thread(void *arg)
-{
-    int ret;
-    AM_CA_CryptoPara_t cryptoPara;
-    AM_CA_StoreInfo_t storeInfo;
-    DVRData *dd = (DVRData *)arg;
-    dvr_block blk;
-
-    CA_DEBUG(0, "Data thread for DVR%d start", dd->id);
-
-    while(dd->running)
-    {
-	memset(&blk, 0x0, sizeof(dvr_block));
-	ret = AM_DVR_Read(DVR_DEV_NO, (uint8_t *)&blk, sizeof(dvr_block), 1000);
-	if (ret == -1) {
-	    sleep(1);
-	    CA_DEBUG(2, "dvr read nothing\r\n");
-	    continue;
-	}
-	if(blk.len != RECORD_BLOCK_SIZE) {
-	    printf("\nAPP Warnning get dvr len:%d !!!!!!\n\n", blk.len);
-	}
-
-	CA_DEBUG(0, "DVR read, addr->%#x, len:%#x, ret:%d\n",
-		blk.addr, blk.len, ret);
-
-	cryptoPara.buf_in = (uint8_t *)blk.addr;
-	cryptoPara.buf_out = dd->crypt_buf;
-	cryptoPara.buf_len = blk.len;
-
-	memset(&storeInfo, 0x0, sizeof(AM_CA_StoreInfo_t));
-	ret = AM_CA_DVREncrypt(g_cas_session, &cryptoPara, &storeInfo);
-	if (ret) {
-	    CA_DEBUG(2, "CAS encrypt failed.\r\n");
-	    continue;
-	}
-	if (storeInfo.actualStoreInfoLen) {
-	    uint64_t streampos = bswap_64(dd->streampos);
-	    if (write(dd->datfd, &streampos, sizeof(streampos)) != sizeof(streampos)) {
-		CA_DEBUG( 0, "%s L%d", __func__, __LINE__);
-		return NULL;
-	    }
-	    uint16_t wrstorelen = bswap_16(storeInfo.actualStoreInfoLen);
-	    if (write(dd->datfd, &wrstorelen, sizeof(wrstorelen)) != sizeof(wrstorelen)) {
-                CA_DEBUG( 0, "%s L%d", __func__, __LINE__);
-                 return NULL;
-            }
-            if (write(dd->datfd, storeInfo.storeInfo, storeInfo.actualStoreInfoLen) != storeInfo.actualStoreInfoLen) {
-                CA_DEBUG( 0, "%s L%d", __func__, __LINE__);
-                return NULL;
-            }
-	}
-
-	if (write(dd->tsfd, cryptoPara.buf_out, blk.len) != blk.len) {
-            CA_DEBUG(0, "DVR write file failed: %s", strerror(errno));
-            return NULL;
-        }
-
-	dd->streampos += blk.len;
-    }
-
-    return NULL;
-}
-
-static void *dvr_play_thread(void *arg)
-{
-    DVRData *dd = (DVRData *)arg;
-
-    int ret;
-    uint32_t len;
-    uint8_t *bufout = NULL;
-    uint8_t *tmp_buf = NULL;
-    uint32_t blockSize;
-    uint16_t infoLen;
-    uint8_t *infodata = NULL;
-    uint64_t streamPos;
-    uint64_t nextStreamPos;
-    uint16_t storeInfoLen;
-    uint8_t *storeInfo = NULL;
-    uint16_t storeInfoMaxLen = 0;
-    int needsetinfo = 1;
-    uint32_t tspos = 0;
-
-    AM_CA_StoreInfo_t caStoreInfo;
-    AM_CA_PrivateInfo_t caPrivateInfo;
-    AM_CA_CryptoPara_t cryptoPara;
-
-    if ((len = read(dd->datfd, &blockSize, 4)) != 4) {
-	goto fail;
-    }
-    blockSize = bswap_32(blockSize);
-    printf("blockSize = %#x\r\n", blockSize);
-
-    if (AM_CA_GetSecureBuffer(&bufout, blockSize)) {
-	goto fail;
-    }
-
-    if ((len = read(dd->datfd, &infoLen, 2)) != 2) {
-	goto fail;
-    }
-    infoLen = bswap_16(infoLen);
-
-    if ((infodata = malloc(infoLen + 1)) == NULL) {
-	goto fail;
-    }
-
-    if ((len = read(dd->datfd, infodata, infoLen)) != infoLen) {
-	goto fail;
-    }
-    infodata[infoLen] = 0;
-
-    CA_DEBUG(0, "infolen [%#x]", infoLen);
-
-    if ((len = read(dd->datfd, &nextStreamPos, 8)) != 8) {
-	goto fail;
-    }
-    nextStreamPos = bswap_64(nextStreamPos);
-
-    tmp_buf = malloc(1024*1024);
-
-    while (dd->running) {
-	streamPos = nextStreamPos;
-	if (streamPos == ULLONG_MAX) {
-	    //break;
-	}
-	if ((len = read(dd->datfd, &storeInfoLen, 2)) != 2) {
-	    goto failstop;
-	}
-	storeInfoLen = bswap_16(storeInfoLen);
-	CA_DEBUG(0, "storeInfolen [%#x]", storeInfoLen);
-	if (storeInfoLen > storeInfoMaxLen) {
-	    uint8_t *p;
-	    if ((p = realloc(storeInfo, storeInfoLen)) == NULL) {
-		goto failstop;
-	    }
-	    storeInfo = p;
-	    storeInfoMaxLen = storeInfoLen;
-	}
-        if ((len = read(dd->datfd, storeInfo, storeInfoLen)) != storeInfoLen) {
-            goto failstop;
-        }
-        nextStreamPos = ULLONG_MAX;
-        len = read(dd->datfd, &nextStreamPos, 8 );
-        nextStreamPos = bswap_64( nextStreamPos );
-        printf( "2-read nextStreamPos->%d\n", nextStreamPos);
-
-dvrreplay:
-	memcpy(caStoreInfo.storeInfo, storeInfo, storeInfoLen);
-	caStoreInfo.actualStoreInfoLen = storeInfoLen;
-	memcpy(caPrivateInfo.info, infodata, infoLen);
-	caPrivateInfo.infoLen = infoLen;
-	ret = AM_CA_DVRReplay(g_cas_session, &caStoreInfo, &caPrivateInfo);
-	if (ret) {
-	    printf("CAS DVR play failed. ret = %d, [%#x, %#x]\r\n", ret, storeInfoLen, infoLen);
-	    goto failstop;
-	}
-        if (needsetinfo) {
-            needsetinfo = 0;
-            infoLen = 0;
-            free(infodata);
-            infodata = NULL;
-        }
-
-	while (tspos < nextStreamPos) {
-            if ((len = read(dd->tsfd, tmp_buf, blockSize)) < 0) {
-                printf("%s L%d", __func__, __LINE__ );
-                goto failstop;
-            }
-            printf("3.read data, bs:%d, len:%d. buf[%#x]\n", blockSize, len, tmp_buf);
-            if (len == 0) {
-                printf("%s L%d", __func__, __LINE__);
-                break;
-            }
-
-	    cryptoPara.buf_in = tmp_buf;
-	    cryptoPara.buf_out = bufout;
-	    cryptoPara.buf_len = blockSize;
-	    ret = AM_CA_DVRDecrypt(g_cas_session, &cryptoPara);
-	    if (ret) {
-		printf("CAS DVR decrypt failed. [%#x, %#x, %#x]\r\n", cryptoPara.buf_in, bufout, blockSize);
-		goto failstop;
-	    }
-	    tspos += blockSize;
-
-	    ret = CA_CopyNormal(bufout, blockSize, tmp_buf, &len);
-	    if (ret < 0) printf("++failed to copy\r\n");
-	    if (write(dd->dumpfd, tmp_buf, len) != len) {
-		printf("dump write failed\r\n");
-	    }
-	}
-    }
-    AM_CA_DVRStopReplay(g_cas_session);
-    return 0;
-
-failstop:
-    AM_CA_DVRStopReplay(g_cas_session);
-
-fail:
-    CA_DEBUG(0, "dvr play thread failed");
-    if (infodata) free(infodata);
-    if (storeInfo) free(storeInfo);
-    if (tmp_buf) free(tmp_buf);
-    if (dd->tsfd >= 0) close(dd->tsfd);
-    if (dd->datfd >= 0) close(dd->datfd);
-    if (dd->dumpfd >= 0) close(dd->dumpfd);
-    return (void*)1;
-}
-
-static int fend_lock() {
+static int fend_lock(int dev_no) {
     AM_FEND_OpenPara_t fpara;
     struct dvb_frontend_parameters p;
     fe_status_t status;
 
+    UNUSED(dev_no);
     memset(&fpara, 0, sizeof(fpara));
     fpara.mode = FE_QAM;
-    AM_TRY(AM_FEND_Open(FEND_DEV_NO, &fpara));
+    AM_FEND_Open(FEND_DEV_NO, &fpara);
 
     AM_FEND_SetMode(FEND_DEV_NO, fpara.mode);
 
-    p.frequency = 682000000;
+    p.frequency = 666000000;
     p.u.qam.symbol_rate = 6870000;
     p.u.qam.fec_inner = FEC_AUTO;
     p.u.qam.modulation = QAM_64;
 
-    AM_TRY(AM_FEND_Lock(FEND_DEV_NO, &p, &status));
+    AM_FEND_Lock(FEND_DEV_NO, &p, &status);
 
     AM_FEND_Close( FEND_DEV_NO );
 
     if (status & FE_HAS_LOCK) {
-        printf("locked\n");
+        INF("locked\n");
         return 0;
     }
     else {
-        printf("unlocked\n");
+        INF("unlocked\n");
         return -1;
     }
 }
@@ -327,307 +142,721 @@ static int fend_lock() {
 static int dvb_init(void)
 {
     int ret;
-    AM_DMX_OpenPara_t dmx_para;
     AM_DSC_OpenPara_t dsc_para;
-    AM_DVR_OpenPara_t dvr_para;
-    AM_AV_OpenPara_t av_para;
-    uint8_t *secure_buf = NULL;
-    uint8_t tmp_buf[32] = {0};
 
-    memset(&dmx_para, 0x0, sizeof(AM_DMX_OpenPara_t));
     memset(&dsc_para, 0x0, sizeof(AM_DSC_OpenPara_t));
-    memset(&dvr_para, 0x0, sizeof(AM_DVR_OpenPara_t));
-    memset(&av_para, 0x0, sizeof(AM_AV_OpenPara_t));
-
-    if (AM_AV_Open(AV_DEV_NO, &av_para)) {
-	CA_DEBUG(0, "av device open fail\n");
-    }
-
-    if (AM_DMX_Open(DMX_DEV_NO, &dmx_para)) {
-	CA_DEBUG(0, "dmx device open fail\n");
-    }
 
     if (AM_DSC_Open(DSC_DEV_NO, &dsc_para)) {
 	CA_DEBUG(0, "dsc device open fail\n");
     }
 
-    if (AM_DVR_Open(DVR_DEV_NO, &dvr_para)) {
-	CA_DEBUG(0, "dvr device open fail\n");
-    }
-
-    AM_DMX_SetSource(DMX_DEV_NO, AM_DMX_SRC_TS0);
-    AM_AV_SetTSSource(AV_DEV_NO, AM_AV_TS_SRC_DMX0);
     AM_DSC_SetSource(DSC_DEV_NO, AM_DSC_SRC_DMX0);
-    AM_DVR_SetSource(DVR_DEV_NO, 0);
 
     ret = AM_CA_Init(VMX_SYS_ID, &g_cas_handle);
     if (ret) {
-	printf("CAS init failed. ret = %d\r\n", ret);
+        ERR("CAS init failed. ret = %d\r\n", ret);
     }
-    if (AM_CA_GetSecureBuffer(&secure_buf, DVR_BUFFER_SIZE)) {
-	printf("CAS get secure buffer failed. \r\n");
-	return -1;
-    }
-    sprintf(tmp_buf, "%d", secure_buf);
-    AM_FileEcho( "/sys/class/stb/asyncfifo0_secure_enable", "1" );//enable secure pvr
-    AM_FileEcho( "/sys/class/stb/asyncfifo0_secure_addr", tmp_buf );
-    AM_FileEcho( "/sys/class/stb/demux_reset", "1");
+
+    INF("dvb init done\r\n");
 
     return 0;
 }
 
-static Program_Info_t *get_program(unsigned int program_num)
-{
-    Program_Info_t *prog = NULL;
-
-    prog = (Program_Info_t *)malloc(sizeof(Program_Info_t));
-    if (!prog) {
-	return NULL;
-    }
-#if 0
-    prog->vpid = 0x22;
-    prog->apid = 0x21;
-    prog->vfmt = 0;
-    prog->afmt = 0;
-    prog->service_id = 0xa;
-    prog->service_mode = 0;
-    prog->scrambled = 0;
-#else
-    prog->vpid = 0x101;
-    prog->apid = 0x102;
-    prog->vfmt = 0;
-    prog->afmt = 0;
-    prog->service_id = 1059;
-    prog->service_mode = 0;
-    prog->ecm_pid = 0x603;
-    prog->emm_pid = 0x1800;
-    prog->scrambled = 1;
-#endif
-    return prog;
-}
-
-static int play_program(Program_Info_t *prog)
+static DVR_Result_t encrypt_callback(DVR_CryptoParams_t *params, void *userdata)
 {
     int ret;
+    UNUSED(userdata);
 
-    AM_AV_InjectPara_t play_para;
+    AM_CA_CryptoPara_t *cryptoPara = (AM_CA_CryptoPara_t *)params;
+
+    if (!recorder.cas_session) {
+        ERR("%s invalid cas session\n", __func__);
+        return -1;
+    }
+
+    ret = AM_CA_DVREncrypt(recorder.cas_session, cryptoPara);
+    if (ret) {
+        cryptoPara->buf_len = 0;
+        cryptoPara->buf_out.size = 0;
+        ERR("%s failed\n", __func__);
+        return -1;
+    }
+
+    INF("%#x bytes encrypted\n", cryptoPara->buf_len);
+
+    return 0;
+}
+
+static DVR_Result_t decrypt_callback(DVR_CryptoParams_t *params, void *userdata)
+{
+    int ret;
+    UNUSED(userdata);
+
+    AM_CA_CryptoPara_t *cryptoPara = (AM_CA_CryptoPara_t *)params;
+
+    if (!play.cas_session) {
+        ret = AM_CA_OpenSession(g_cas_handle, &play.cas_session);
+        ret |= AM_CA_DVRReplay(play.cas_session, cryptoPara);
+        INF("%s open cas session:%#x, start cas replay. ret:%d\n",
+            __func__, play.cas_session, ret);
+    }
+
+    ret = AM_CA_DVRDecrypt(play.cas_session, cryptoPara);
+    if (ret) {
+        cryptoPara->buf_len = 0;
+        cryptoPara->buf_out.size = 0;
+        ERR("%s failed\n", __func__);
+        return -1;
+    }
+
+    INF("%#x bytes decrypted\n", cryptoPara->buf_len);
+
+    return 0;
+}
+
+static DVR_Result_t RecEventHandler(DVR_RecordEvent_t event, void *params, void *userdata)
+{
+   if (userdata != NULL)
+   {
+      DVR_WrapperRecordStatus_t *status = (DVR_WrapperRecordStatus_t *)params;
+
+      switch (event)
+      {
+         case DVR_RECORD_EVENT_STATUS:
+            INF("Record event %d\n", status->state);
+            break;
+         default:
+            ERR("Unhandled recording event 0x%x from (%s)\n", event, (char *)userdata);
+         break;
+      }
+   }
+   return DVR_SUCCESS;
+}
+
+void video_callback(void *user_data, am_tsplayer_event *event)
+{
+    UNUSED(user_data);
+    INF("video evt callback, type:%d\r\n", event?event->type:0);
+    switch (event->type) {
+        case AM_TSPLAYER_EVENT_TYPE_VIDEO_CHANGED:
+            INF("[evt] video changed\r\n");
+            break;
+
+        case AM_TSPLAYER_EVENT_TYPE_FIRST_FRAME:
+            INF("[evt] first frame\r\n");
+            break;
+        default:
+            break;
+    }
+}
+
+static DVR_Result_t PlayEventHandler(DVR_PlaybackEvent_t event, void *params, void *userdata)
+{
+   UNUSED(params);
+
+   if (userdata != NULL)
+   {
+      switch (event)
+      {
+         case DVR_PLAYBACK_EVENT_TRANSITION_OK:
+            /**< Update the current player information*/
+           //log_play_evt((DVR_WrapperPlaybackStatus_t *)params, userdata);
+         break;
+         case DVR_PLAYBACK_EVENT_REACHED_END:
+            /**< File player's EOF*/
+           //PLAY_EVT("EOF (%s)\n", (char *)userdata);
+         break;
+         default:
+           ERR("Unhandled event 0x%x from (%s)\n", event, (char *)userdata);
+         break;
+      }
+   }
+   return DVR_SUCCESS;
+}
+
+static void tsplayer_callback(void *user_data, am_tsplayer_event *event)
+{
+   UNUSED(user_data);
+
+   if (event)
+   {
+      switch (event->type)
+      {
+          case AM_TSPLAYER_EVENT_TYPE_PTS:
+          {
+              INF("[evt] AM_TSPLAYER_EVENT_TYPE_PTS: stream_type:%d, pts[%llu]\n",
+                  event->event.pts.stream_type,
+                  event->event.pts.pts);
+              break;
+          }
+          case AM_TSPLAYER_EVENT_TYPE_DTV_SUBTITLE:
+          {
+              uint8_t* pbuf = event->event.mpeg_user_data.data;
+              uint32_t size = event->event.mpeg_user_data.len;
+              INF("[evt] AM_TSPLAYER_EVENT_TYPE_DTV_SUBTITLE: %x-%x-%x-%x ,size %d\n",
+                  pbuf[0], pbuf[1], pbuf[2], pbuf[3], size);
+              break;
+          }
+          case AM_TSPLAYER_EVENT_TYPE_USERDATA_CC:
+          {
+              uint8_t* pbuf = event->event.mpeg_user_data.data;
+              uint32_t size = event->event.mpeg_user_data.len;
+              INF("[evt] AM_TSPLAYER_EVENT_TYPE_USERDATA_CC: %x-%x-%x-%x ,size %d\n",
+                  pbuf[0], pbuf[1], pbuf[2], pbuf[3], size);
+              break;
+          }
+          case AM_TSPLAYER_EVENT_TYPE_USERDATA_AFD:
+          {
+              uint8_t* pbuf = event->event.mpeg_user_data.data;
+              uint32_t size = event->event.mpeg_user_data.len;
+              INF("[evt] AM_TSPLAYER_EVENT_TYPE_USERDATA_AFD: %x-%x-%x-%x ,size %d\n",
+                  pbuf[0], pbuf[1], pbuf[2], pbuf[3], size);
+              //USERDATA_AFD_t afd = *((USERDATA_AFD_t *)pbuf);
+              //afd.reserved = afd.pts = 0;
+              //INF("[evt] video afd changed: flg[0x%x] fmt[0x%x]\n", afd.af_flag, afd.af);
+              break;
+          }
+          case AM_TSPLAYER_EVENT_TYPE_VIDEO_CHANGED:
+          {
+              INF("[evt] AM_TSPLAYER_EVENT_TYPE_VIDEO_CHANGED: [width:height] [%d x %d] @%d aspectratio[%d]\n",
+              event->event.video_format.frame_width,
+              event->event.video_format.frame_height,
+              event->event.video_format.frame_rate,
+              event->event.video_format.frame_aspectratio);
+              break;
+          }
+          case AM_TSPLAYER_EVENT_TYPE_AUDIO_CHANGED:
+          {
+              INF("[evt] AM_TSPLAYER_EVENT_TYPE_AUDIO_CHANGED: sample_rate:%d, channels:%d\n",
+                  event->event.audio_format.sample_rate,
+                  event->event.audio_format.channels);
+              break;
+          }
+          case AM_TSPLAYER_EVENT_TYPE_DATA_LOSS:
+          {
+              INF("[evt] AM_TSPLAYER_EVENT_TYPE_DATA_LOSS\n");
+              break;
+          }
+          case AM_TSPLAYER_EVENT_TYPE_DATA_RESUME:
+          {
+              INF("[evt] AM_TSPLAYER_EVENT_TYPE_DATA_RESUME\n");
+              break;
+          }
+          case AM_TSPLAYER_EVENT_TYPE_SCRAMBLING:
+          {
+              INF("[evt] AM_TSPLAYER_EVENT_TYPE_SCRAMBLING: stream_type:%d is_scramling[%d]\n",
+                  event->event.scramling.stream_type,
+                  event->event.scramling.scramling);
+              break;
+          }
+          case AM_TSPLAYER_EVENT_TYPE_FIRST_FRAME:
+          {
+              INF("[evt] AM_TSPLAYER_EVENT_TYPE_FIRST_FRAME: ## VIDEO_AVAILABLE ##\n");
+              break;
+          }
+          default:
+              break;
+      }
+   }
+}
+
+static int start_liveplay(dvb_service_info_t *prog)
+{
+    uint32_t num;
+    am_tsplayer_result ret;
+    am_tsplayer_video_params vparam;
+    am_tsplayer_audio_params aparam;
+    am_tsplayer_init_params param;
+    am_tsplayer_avsync_mode avsyncmode = TS_SYNC_AMASTER;
+
+    am_tsplayer_handle player_session;
     AM_CA_ServiceInfo_t cas_para;
 
-    play_para.vid_fmt = prog->vfmt;
-    play_para.aud_fmt = prog->afmt;
-    play_para.pkg_fmt = PFORMAT_TS;
-    play_para.vid_id  = prog->vpid;
-    play_para.aud_id  = prog->apid;
+    INF("vpid:%#x vfmt:%d apid:%#x afmt:%d ecmpid:%#x emmpid:%#x scramble:%d\r\n",
+        prog->i_video_pid, prog->i_vformat,
+        prog->i_audio_pid, prog->i_aformat,
+        prog->i_ecm_pid[0], prog->i_ca_pid, prog->scrambled);
 
-    AM_AV_StartTS(AV_DEV_NO, play_para.vid_id, play_para.aud_id, play_para.vid_fmt, play_para.aud_fmt);
+    memset(&param, 0 , sizeof(am_tsplayer_init_params));
+    param.source = TS_DEMOD;
+    param.dmx_dev_id = DMX_DEV_NO;
+    if (prog->scrambled) {
+        param.drmmode = TS_INPUT_BUFFER_TYPE_TVP;
+    }
+
+    if (param.drmmode != TS_INPUT_BUFFER_TYPE_NORMAL) {
+        play.secmem_session = AM_CA_CreateSecmem(SERVICE_LIVE_PLAY, NULL, NULL);
+        if (!play.secmem_session) {
+            CA_DEBUG(0, "Create live secmem failed!!!!");
+            return -1;
+        }
+    }
+
+    ret = AmTsPlayer_create(param, &player_session);
+    if (ret != AM_TSPLAYER_OK) {
+        CA_DEBUG(0, "Create tslayer failed!!!! err:%x", ret);
+        return -1;
+    }
+    play.player_session = player_session;
+
+    ret = AmTsPlayer_getInstansNo(player_session, &num);
+    ret |= AmTsPlayer_setWorkMode(player_session, TS_PLAYER_MODE_NORMAL);
+    ret |= AmTsPlayer_registerCb(player_session, video_callback, NULL);
+    ret |= AmTsPlayer_setSyncMode(player_session, avsyncmode);
+    INF("create tsplayer success. session:%#x instance_no:%d ret:%d\r\n", player_session, num, ret);
+
+    vparam.codectype = prog->i_vformat;
+    vparam.pid = prog->i_video_pid;
+    AmTsPlayer_setVideoParams(player_session, &vparam);
+    AmTsPlayer_startVideoDecoding(player_session);
+
+    aparam.codectype = prog->i_aformat;
+    aparam.pid = prog->i_audio_pid;
+    AmTsPlayer_setAudioParams(player_session, &aparam);
+    AmTsPlayer_startAudioDecoding(player_session);
+
+    AmTsPlayer_showVideo(player_session);
+    AmTsPlayer_setTrickMode(player_session, AV_VIDEO_TRICK_MODE_NONE);
 
     if (!prog->scrambled)
-	return 0;
+        return 0;
 
-    ret = AM_CA_SetEmmPid(g_cas_handle, prog->emm_pid);
+    ret = AM_CA_SetEmmPid(g_cas_handle, prog->i_ca_pid);
     if (ret) {
-	printf("CAS set emm PID failed. ret = %d\r\n", ret);
-	return -1;
+        ERR("CAS set emm PID failed. ret = %d\r\n", ret);
+        return -1;
     }
 
-    ret = AM_CA_OpenSession(g_cas_handle, &g_cas_session);
+    ret = AM_CA_OpenSession(g_cas_handle, &play.cas_session);
     if (ret) {
-	printf("CAS open session failed. ret = %d\r\n", ret);
-	return -1;
+        ERR("CAS open session failed. ret = %d\r\n", ret);
+        return -1;
     }
 
     memset(&cas_para, 0x0, sizeof(AM_CA_ServiceInfo_t));
-    cas_para.service_id = prog->service_id;
-    cas_para.service_mode = prog->service_mode;
-    cas_para.service_type = SERVICE_PLAY;
-    cas_para.ecm_pid = prog->ecm_pid;
-    cas_para.stream_pids[0] = prog->vpid;
-    cas_para.stream_pids[1] = prog->apid;
+    cas_para.service_id = prog->i_service_num;
+    cas_para.service_type = SERVICE_LIVE_PLAY;
+    cas_para.ecm_pid = prog->i_ecm_pid[0];
+    cas_para.stream_pids[0] = prog->i_video_pid;
+    cas_para.stream_pids[1] = prog->i_audio_pid;
     cas_para.stream_num = 2;
     cas_para.ca_private_data_len = 0;
-    ret = AM_CA_StartDescrambling(g_cas_session, &cas_para);
+    ret = AM_CA_StartDescrambling(play.cas_session, &cas_para);
     if (ret) {
-	printf("CAS start descrambling failed. ret = %d\r\n", ret);
-	return -1;
+        ERR("CAS start descrambling failed. ret = %d\r\n", ret);
+        return -1;
     }
+
+    INF("CAS started\r\n");
 
     return 0;
 }
 
-static int record_program(Program_Info_t *prog, char *tspath)
+static int stop_liveplay(void)
 {
-    int ret;
-    char *datpath = NULL;
-    uint32_t len;
-    uint16_t infolen;
-    aml_infodata_t *a;
-    uint32_t blockSize = RECORD_BLOCK_SIZE;
-
-    if ( !tspath)
-        return -1;
-    len = strlen(tspath);
-    datpath = malloc(len + 2);
-    if (!datpath)
-        return -1;
-    if (strcmp(tspath + len - 3, ".ts") == 0) {
-        memcpy(datpath, tspath, len - 3);
-        strcpy(datpath + len - 3, ".dat");
+    if (play.cas_session) {
+        AM_CA_StopDescrambling(play.cas_session);
+        AM_CA_CloseSession(play.cas_session);
     }
 
-    AM_DVR_StartRecPara_t dvr_para;
+    AmTsPlayer_stopAudioDecoding(play.player_session);
+    AmTsPlayer_stopVideoDecoding(play.player_session);
+    AmTsPlayer_release(play.player_session);
+
+    memset(&play, 0, sizeof(CasTestSession));
+
+    return 0;
+}
+
+static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
+{
+    DVR_WrapperRecordOpenParams_t rec_open_params;
+    DVR_WrapperRecordStartParams_t rec_start_params;
+    DVR_WrapperPidsInfo_t *pids_info;
+    //char cmd[256];
+    int error;
+
     AM_CA_ServiceInfo_t cas_para;
-    AM_CA_PrivateInfo_t cas_pri_info;
 
-    DVRData *dd = (DVRData *)&g_dvr_data;
+    UNUSED(dev_no);
+    DVR_WrapperRecord_t recorder_session;
+    //sprintf(cmd, "echo ts%d > /sys/class/stb/demux%d_source", tssrc, DMX_DEV_DVR);
+    //system(cmd);
 
-    if (!prog->scrambled) {
-	goto record;
+    memset(&rec_open_params, 0, sizeof(DVR_WrapperRecordOpenParams_t));
+
+    rec_open_params.dmx_dev_id = DMX_DEV_NO;
+    rec_open_params.segment_size = 100 * 1024 * 1024;/*100MB*/
+    rec_open_params.max_size = size;
+    rec_open_params.max_time = duration;
+    rec_open_params.event_fn = RecEventHandler;
+    rec_open_params.event_userdata = "rec0";
+    rec_open_params.flags = 0;
+    if (is_timeshifting(mode))
+        rec_open_params.flags |= DVR_RECORD_FLAG_ACCURATE;
+
+    strncpy(rec_open_params.location, tspath, sizeof(rec_open_params.location));
+
+    rec_open_params.is_timeshift = (is_timeshifting(mode)) ? DVR_TRUE : DVR_FALSE;
+
+    if (prog->scrambled) {
+        rec_open_params.crypto_data = prog;
+        rec_open_params.crypto_fn = encrypt_callback;
     }
 
-    ret = AM_CA_SetEmmPid(g_cas_handle, prog->emm_pid);
-    if (ret) {
-	printf("CAS set emm PID failed. ret = %d\r\n", ret);
-	return -1;
+    error = dvr_wrapper_open_record(&recorder_session, &rec_open_params);
+    if (error) {
+      ERR( "recorder open fail = (0x%x)\n", error);
+      return -1;
+    }
+    recorder.dvr_session = (void *)recorder_session;
+
+    INF( "Starting %s recording %p [%ld secs/%llu bytes] [%s.ts]\n",
+       (is_timeshifting(mode))? "timeshift" : "normal",
+       recorder_session,
+       rec_open_params.max_time,
+       rec_open_params.max_size,
+       rec_open_params.location);
+
+    memset(&rec_start_params, 0, sizeof(rec_start_params));
+
+    if (prog->scrambled) {
+        void *buf = NULL;
+        uint32_t secmem_size = 0;
+        SecMemHandle secmem_session;
+
+        secmem_session = AM_CA_CreateSecmem(SERVICE_PVR_RECORDING, &buf, &secmem_size);
+        if (!secmem_session) {
+            ERR("create dvr recording secmem failed\n");
+            dvr_wrapper_close_record(recorder_session);
+            return -1;
+        }
+        recorder.secmem_session = secmem_session;
+
+        INF("set dvr recording secmem addr:%#x size:%#x\n", (uint32_t)buf, secmem_size);
+        error = dvr_wrapper_set_record_secure_buffer(recorder_session, buf, secmem_size);
+        if (error) {
+            dvr_wrapper_close_record(recorder_session);
+            AM_CA_DestroySecmem(secmem_session);
+            recorder.secmem_session = (SecMemHandle)NULL;
+            return -1;
+        }
+
+        error = AM_CA_SetEmmPid(g_cas_handle, prog->i_ca_pid);
+        if (error) {
+            ERR("CAS set emm PID failed. ret = %d\r\n", error);
+            return -1;
+        }
+
+        error = AM_CA_OpenSession(g_cas_handle, &recorder.cas_session);
+        if (error) {
+            ERR("CAS open session failed. ret = %d\r\n", error);
+            return -1;
+        }
+
+        memset(&cas_para, 0x0, sizeof(AM_CA_ServiceInfo_t));
+        if (is_timeshifting(mode)) {
+            cas_para.dmx_dev = DMX_DEV_NO_3RD;
+        } else {
+            cas_para.dmx_dev = DMX_DEV_NO;
+        }
+        cas_para.service_id = prog->i_service_num;
+        cas_para.service_type = SERVICE_PVR_RECORDING;
+        cas_para.ecm_pid = prog->i_ecm_pid[0];
+        cas_para.stream_pids[0] = prog->i_video_pid;
+        cas_para.stream_pids[1] = prog->i_audio_pid;
+        cas_para.stream_num = 2;
+        cas_para.ca_private_data_len = 0;
+
+        error = AM_CA_DVRStart(recorder.cas_session, &cas_para);
+        if (error) {
+            ERR("CAS start DVR failed. ret = %d\r\n", error);
+            return -1;
+        }
     }
 
-    ret = AM_CA_OpenSession(g_cas_handle, &g_cas_session);
-    if (ret) {
-	printf("CAS open session failed. ret = %d\r\n", ret);
-	return -1;
+    pids_info = &rec_start_params.pids_info;
+    pids_info->nb_pids = 2;
+    pids_info->pids[0].pid = prog->i_video_pid;
+    pids_info->pids[1].pid = prog->i_audio_pid;
+    pids_info->pids[0].type = DVR_STREAM_TYPE_VIDEO << 24 | prog->i_vformat;
+    pids_info->pids[1].type = DVR_STREAM_TYPE_AUDIO << 24 | prog->i_aformat;
+    error = dvr_wrapper_start_record(recorder_session, &rec_start_params);
+    if (error)
+    {
+      ERR( "recorder start fail = (0x%x)\n", error);
+      dvr_wrapper_close_record(recorder_session);
+      AM_CA_DestroySecmem(recorder.secmem_session);
+      recorder.secmem_session = (SecMemHandle)NULL;
+      return -1;
     }
-
-    memset(&cas_para, 0x0, sizeof(AM_CA_ServiceInfo_t));
-    cas_para.service_id = prog->service_id;
-    cas_para.service_mode = prog->service_mode;
-    cas_para.service_type = SERVICE_PLAY;
-    cas_para.ecm_pid = prog->ecm_pid;
-    cas_para.stream_pids[0] = prog->vpid;
-    cas_para.stream_pids[1] = prog->apid;
-    cas_para.stream_num = 2;
-    cas_para.ca_private_data_len = 0;
-
-    memset(&cas_pri_info, 0x0, sizeof(AM_CA_PrivateInfo_t));
-    cas_pri_info.infoLen = sizeof(cas_pri_info.info);
-
-    a = (aml_infodata_t*)cas_pri_info.info;
-    a->magic = AML_INFODATA_MAGIC;
-    a->vpid = prog->vpid;
-    a->apid = prog->apid;
-    a->vfmt = prog->vfmt;
-    a->afmt = prog->afmt;
-    ret = AM_CA_DVRStart(g_cas_session, &cas_para, &cas_pri_info);
-    if (ret) {
-	printf("CAS start DVR failed. ret = %d\r\n", ret);
-	return -1;
-    }
-
-    dd->crypt_buf = malloc(RECORD_BLOCK_SIZE);
-    CA_DEBUG(0, "R2R out buffer addr: %#x\r\n", dd->crypt_buf);
-
-record:
-    dd->tsfd = open( tspath, O_WRONLY | O_CREAT | O_TRUNC, 0666 );
-    dd->datfd = open( datpath, O_WRONLY | O_CREAT | O_TRUNC, 0666 );
-    free(datpath);
-
-    blockSize = bswap_32(blockSize);
-    if (write(dd->datfd, &blockSize, sizeof(blockSize)) != sizeof(blockSize)) {
-	CA_DEBUG(0, "DVR record write dat failed[l%d]", __LINE__);
-	return -1;
-    }
-
-    infolen = bswap_16(cas_pri_info.infoLen);
-    if (write(dd->datfd, &infolen, sizeof(infolen)) != sizeof(infolen)) {
-	CA_DEBUG(0, "DVR record write dat failed[l%d]", __LINE__);
-	return -1;
-    }
-
-    infolen = cas_pri_info.infoLen;
-    CA_DEBUG(0, "write pri infolen [%#x]", infolen);
-    if (write(dd->datfd, cas_pri_info.info, infolen) != infolen) {
-	CA_DEBUG(0, "DVR record write dat failed[l%d]", __LINE__);
-	return -1;
-    }
-
-    dvr_para.pid_count = 2;
-    dvr_para.pids[0] = prog->vpid;
-    dvr_para.pids[1] = prog->apid;
-    ret = AM_DVR_StartRecord(DVR_DEV_NO, &dvr_para);
-    if (ret) {
-	printf("AM start DVR failed. ret = %d\r\n", ret);
-	return -1;
-    }
-
-    dd->running = 1;
-    pthread_create(&dd->thread, NULL, dvr_record_thread, dd);
 
     return 0;
 }
 
-static int replay_program(Program_Info_t *prog, char *tspath)
+static int stop_recording(int dev_no)
 {
     int ret;
-    int len;
-    char *datpath = NULL;
-    char *dumppath = NULL;
-    DVRData *dd = (DVRData *)&g_dvr_data;
-    if (!tspath) {
-	return -1;
-    }
+    CasSession cas_session = recorder.cas_session;
 
-    len = strlen(tspath);
-    datpath = malloc(len + 2);
-    dumppath = malloc(len + 6);
-    if (!datpath || !dumppath) {
-	return -1;
-    }
-    if (strcmp(tspath + len - 3, ".ts") == 0) {
-        memcpy(datpath, tspath, len - 3);
-        strcpy(datpath + len - 3, ".dat");
-        memcpy(dumppath, tspath, len - 3);
-        strcpy(dumppath + len - 3, "_dump.ts");
-    }
+    UNUSED(dev_no);
 
-    dd->running = 1;
-    dd->tsfd = open(tspath, O_RDONLY);
-    dd->datfd = open(datpath, O_RDONLY);
-    dd->dumpfd = open( dumppath, O_WRONLY | O_CREAT | O_TRUNC, 0666 );
-
-    ret = AM_CA_OpenSession(g_cas_handle, &g_cas_session);
+    ret = dvr_wrapper_stop_record((DVR_WrapperRecord_t *)recorder.dvr_session);
+    ret |= dvr_wrapper_close_record((DVR_WrapperRecord_t *)recorder.dvr_session);
     if (ret) {
-	printf("CAS open session failed. ret = %d\r\n", ret);
-	return -1;
+        ERR("stop/close record failed:%d\n", ret);
+        return -1;
     }
-    pthread_create(&dd->thread, NULL, dvr_play_thread, dd);
+
+    if (cas_session) {
+        AM_CA_DVRStop(cas_session);
+        AM_CA_CloseSession(cas_session);
+        ret = AM_CA_DestroySecmem(recorder.secmem_session);
+        if (ret) {
+            ERR("destroy secmem failed:%d", ret);
+            return -1;
+        }
+    }
+
+    memset(&recorder, 0, sizeof(CasTestSession));
 
     return 0;
+}
+
+static int get_dvr_info(char *location, int *apid, int *afmt, int *vpid, int *vfmt)
+{
+    uint32_t segment_nb;
+    uint64_t *p_segment_ids;
+    DVR_RecordSegmentInfo_t seg_info;
+    int error;
+    int aid = 0x1fff, vid = 0x1fff;
+    int aft = 0, vft = 0;
+
+    error = dvr_segment_get_list(location, &segment_nb, &p_segment_ids);
+    if (!error && segment_nb) {
+        error = dvr_segment_get_info(location, p_segment_ids[0], &seg_info);
+        free(p_segment_ids);
+    }
+    if (!error) {
+        int i;
+        for (i = 0; i < seg_info.nb_pids; i++) {
+            switch (DVR_STREAM_TYPE_TO_TYPE(seg_info.pids[i].type))
+            {
+            case DVR_STREAM_TYPE_VIDEO:
+                vid = seg_info.pids[i].pid;
+                vft = DVR_STREAM_TYPE_TO_FMT(seg_info.pids[i].type);
+                INF("type(0x%x)[video] pid(0x%x) fmt(%d)\n",
+                    DVR_STREAM_TYPE_TO_TYPE(seg_info.pids[i].type),
+                    seg_info.pids[i].pid,
+                    DVR_STREAM_TYPE_TO_FMT(seg_info.pids[i].type)
+                    );
+            break;
+            case DVR_STREAM_TYPE_AUDIO:
+                aid = seg_info.pids[i].pid;
+                aft = DVR_STREAM_TYPE_TO_FMT(seg_info.pids[i].type);
+                INF("type(0x%x)[audio] pid(0x%x) fmt(%d)\n",
+                    DVR_STREAM_TYPE_TO_TYPE(seg_info.pids[i].type),
+                    seg_info.pids[i].pid,
+                    DVR_STREAM_TYPE_TO_FMT(seg_info.pids[i].type)
+                    );
+            break;
+            default:
+                INF("type(0x%x) pid(0x%x) fmt(%d)\n",
+                    DVR_STREAM_TYPE_TO_TYPE(seg_info.pids[i].type),
+                    seg_info.pids[i].pid,
+                    DVR_STREAM_TYPE_TO_FMT(seg_info.pids[i].type)
+                    );
+            break;
+            }
+        }
+    }
+
+    if (apid)
+        *apid = aid;
+    if (afmt)
+        *afmt = aft;
+    if (vpid)
+        *vpid = vid;
+    if (vfmt)
+        *vfmt = vft;
+
+    return 0;
+}
+
+static int start_playback(void *params, int scrambled, int pause)
+{
+    DVR_WrapperPlayback_t player;
+    DVR_PlaybackPids_t play_pids;
+    DVR_WrapperPlaybackOpenParams_t play_params;
+    am_tsplayer_handle tsplayer_handle;
+    int vpid = 1024, apid = 1025, vfmt = 0, afmt = 0;
+    int error;
+
+    memset(&play_params, 0, sizeof(play_params));
+    memset(&play_pids, 0, sizeof(play_pids));
+
+    play_pids.video.type = DVR_STREAM_TYPE_VIDEO;
+    play_pids.audio.type = DVR_STREAM_TYPE_AUDIO;
+
+    if (is_timeshifting(mode)) {
+        dvb_service_info_t *prog = (dvb_service_info_t *)params;
+        strncpy(play_params.location, pfilename, sizeof(play_params.location));
+        play_params.is_timeshift = DVR_TRUE;
+        play_params.dmx_dev_id = DMX_DEV_NO_2ND;
+
+        vpid = prog->i_video_pid;
+        vfmt = prog->i_vformat;
+        apid = prog->i_audio_pid;
+        afmt = prog->i_aformat;
+    } else {
+        strncpy(play_params.location, params, sizeof(play_params.location));
+        play_params.is_timeshift = DVR_FALSE;
+        play_params.dmx_dev_id = DMX_DEV_NO;
+        get_dvr_info(params, &apid, &afmt, &vpid, &vfmt);
+
+    }
+    INF("vpid:%#x vfmt:%d apid:%#x afmt:%d\n", vpid, vfmt, apid, afmt);
+
+    switch (vfmt) {
+        case AV_VIDEO_CODEC_MPEG1:
+            vfmt = DVR_VIDEO_FORMAT_MPEG1;
+            break;
+        case AV_VIDEO_CODEC_MPEG2:
+            vfmt = DVR_VIDEO_FORMAT_MPEG2;
+            break;
+        case AV_VIDEO_CODEC_H264:
+            vfmt = DVR_VIDEO_FORMAT_H264;
+            break;
+        default:
+            break;
+    };
+
+    switch (afmt) {
+            case AV_AUDIO_CODEC_MP3:
+                vfmt = DVR_AUDIO_FORMAT_MPEG;
+                break;
+            case AV_AUDIO_CODEC_AAC:
+                vfmt = DVR_AUDIO_FORMAT_AAC;
+                break;
+            default:
+                break;
+    };
+    play_pids.video.pid = vpid;
+    play_pids.video.format = vfmt;
+    play_pids.audio.pid = apid;
+    play_pids.audio.format = afmt;
+
+    play_params.event_fn = PlayEventHandler;
+    play_params.event_userdata = "play0";
+
+     /*open TsPlayer*/
+    {
+       uint32_t versionM, versionL;
+       am_tsplayer_init_params init_param =
+       {
+          .source = TS_MEMORY,
+          .dmx_dev_id = DMX_DEV_NO,
+          .event_mask = 0,
+               /*AM_TSPLAYER_EVENT_TYPE_PTS_MASK
+             | AM_TSPLAYER_EVENT_TYPE_DTV_SUBTITLE_MASK
+             | AM_TSPLAYER_EVENT_TYPE_USERDATA_AFD_MASK
+             | AM_TSPLAYER_EVENT_TYPE_VIDEO_CHANGED_MASK
+             | AM_TSPLAYER_EVENT_TYPE_AUDIO_CHANGED_MASK
+             | AM_TSPLAYER_EVENT_TYPE_DATA_LOSS_MASK
+             | AM_TSPLAYER_EVENT_TYPE_DATA_RESUME_MASK
+             | AM_TSPLAYER_EVENT_TYPE_SCRAMBLING_MASK
+             | AM_TSPLAYER_EVENT_TYPE_FIRST_FRAME_MASK,*/
+       };
+       if (is_timeshifting(mode)) {
+           init_param.dmx_dev_id = DMX_DEV_NO_2ND;
+       }
+       if (scrambled) {
+           init_param.drmmode = TS_INPUT_BUFFER_TYPE_SECURE;
+       }
+       am_tsplayer_result result =
+          AmTsPlayer_create(init_param, &tsplayer_handle);
+       INF( "open TsPlayer %s, result(%d)\n", (result)? "FAIL" : "OK", result);
+
+       result = AmTsPlayer_getVersion(&versionM, &versionL);
+       INF( "TsPlayer verison(%d.%d) %s, result(%d)\n",
+          versionM, versionL,
+          (result)? "FAIL" : "OK",
+          result);
+
+       result = AmTsPlayer_registerCb(tsplayer_handle,
+          tsplayer_callback,
+          "tsp0");
+
+       result = AmTsPlayer_setWorkMode(tsplayer_handle, TS_PLAYER_MODE_NORMAL);
+       INF( " TsPlayer set Workmode NORMAL %s, result(%d)\n", (result)? "FAIL" : "OK", result);
+       //result = AmTsPlayer_setSyncMode(tsplayer_handle, TS_SYNC_NOSYNC );
+       //PLAY_DBG(" TsPlayer set Syncmode FREERUN %s, result(%d)", (result)? "FAIL" : "OK", result);
+       result = AmTsPlayer_setSyncMode(tsplayer_handle, TS_SYNC_PCRMASTER );
+       INF( " TsPlayer set Syncmode PCRMASTER %s, result(%d)\n", (result)? "FAIL" : "OK", result);
+       play_params.playback_handle = (Playback_DeviceHandle_t)tsplayer_handle;
+       play.player_session = tsplayer_handle;
+    }
+
+    if (scrambled) {
+        play_params.crypto_fn = decrypt_callback;
+        play_params.crypto_data = NULL;
+    }
+    play_params.block_size = RECORD_BLOCK_SIZE;
+    error = dvr_wrapper_open_playback(&player, &play_params);
+    if (!error)
+    {
+       //DVR_PlaybackFlag_t play_flag = (is_timeshifting(mode))? DVR_PLAYBACK_STARTED_PAUSEDLIVE : 0;
+       DVR_PlaybackFlag_t play_flag = (pause)? DVR_PLAYBACK_STARTED_PAUSEDLIVE : 0;
+       play.dvr_session = (void *)player;
+
+       if (scrambled) {
+           void *sec_buf;
+           uint32_t sec_buf_size = 0;
+
+           play.secmem_session = AM_CA_CreateSecmem(SERVICE_PVR_PLAY, &sec_buf, &sec_buf_size);
+           if (!play.secmem_session) {
+                ERR("cas playback failed. secmem_session:%#x\n", play.secmem_session);
+           }
+           INF("cas playback set secure buffer:%#x, secure buffer size:%#x\n",
+                        sec_buf, sec_buf_size);
+           dvr_wrapper_set_playback_secure_buffer(player, sec_buf, sec_buf_size);
+       }
+       INF( "Starting playback\n");
+
+       error = dvr_wrapper_start_playback(player, play_flag, &play_pids);
+       if (error)
+       {
+          ERR( "Start play failed, error %d\n", error);
+       }
+     }
+
+    return 0;
+}
+
+static int stop_playback(void)
+{
+    dvr_wrapper_stop_playback((DVR_WrapperPlayback_t *)play.dvr_session);
+    if (play.cas_session) {
+        AM_CA_DestroySecmem(play.secmem_session);
+        AM_CA_CloseSession(play.cas_session);
+    }
+    AmTsPlayer_release(play.player_session);
+
+    return 0;
+}
+
+static void usage(int argc, char *argv[])
+{
+    UNUSED(argc);
+
+    INF("Usage: live      : %s live <fend_dev_no> <prog_idx>>\n", argv[0]);
+    INF("Usage: playback  : %s dvrplay <tsfile> <scramble_flag>\n", argv[0]);
 }
 
 static void handle_signal(int signal)
 {
-    if (g_work_type == LIVE_PLAY) {
-	AM_CA_StopDescrambling(g_cas_session);
-	AM_CA_CloseSession(g_cas_session);
-    }
-
-    if (g_work_type == DVR_RECORD) {
-	AM_CA_DVRStop(g_cas_session);
-	AM_CA_CloseSession(g_cas_session);
-    }
-
-    if (g_work_type == DVR_PLAY) {
-	AM_CA_DVRStopReplay(g_cas_session);
-	AM_CA_CloseSession(g_cas_session);
-    }
-
-    //free()
-    //thread_join
-
-    AM_DVR_Close(0);
-    AM_DSC_Close(DSC_DEV_NO);
-    AM_DMX_Close(DMX_DEV_NO);
-    AM_AV_Close(AV_DEV_NO);
-
-    exit( EXIT_SUCCESS );
+    UNUSED(signal);
+    exit(0);
 }
 
 static void init_signal_handler()
@@ -641,82 +870,189 @@ int main(int argc, char *argv[])
 {
     int ret;
     int running = 1;
-    char *tspath = NULL;
-    unsigned int prog_num = 1059;
-    Program_Info_t *prog = NULL;
+    char cmd[256];
+    char tspath[256] = {0};
+    int dvr_dev_no = 0;
+    int fend_dev_no = 0;
+    int prog_idx = 0;
+    int scrambled = 1;
+    dvb_service_info_t *prog = NULL;
 
     if (argc < 3) {
-	printf("Usage: cas_hal_test liveplay program_num\r\n");
-	printf("Usage: cas_hal_test dvrrecord path\r\n");
-	printf("Usage: cas_hal_test dvrplay path\r\n");
-	exit(EXIT_SUCCESS);
+        usage(argc, argv);
+        exit(0);
     }
 
     init_signal_handler();
 
-    if (strcmp(argv[1], "demodlock") == 0) {
-	g_work_type = DEMOD_LOCK;
-    } else if (strcmp(argv[1], "liveplay") == 0) {
-	g_work_type = LIVE_PLAY;
+    memset(&play, 0, sizeof(CasTestSession));
+    memset(&recorder, 0, sizeof(CasTestSession));
+
+    if (strcmp(argv[1], "live") == 0) {
+        mode = LIVE;
+        sscanf(argv[2], "%d", &fend_dev_no);
+        if (argc > 3) {
+            sscanf(argv[3], "%d", &prog_idx);
+        }
     } else if (strcmp(argv[1], "dvrrecord") == 0) {
-	tspath = argv[2];
-	g_work_type = DVR_RECORD;
+        strcpy(&tspath[0], argv[2]);
+        mode = RECORDING;
     } else if (strcmp(argv[1], "dvrplay") == 0) {
-	tspath = argv[2];
-	g_work_type = DVR_PLAY;
+        strcpy(&tspath[0], argv[2]);
+        if (argc > 3) {
+            sscanf(argv[3], "%d", &scrambled);
+        }
+        mode = PLAYBACK;
+    } else {
+        usage(argc, argv);
+        exit(0);
     }
 
-    printf("@@@in cas_hal_test g_work_type = %d\r\n", g_work_type);
+    INF("@@@in cas_hal_test mode = %d\n", mode);
 
     dvb_init();
-    CA_DEBUG(0, "dvb init done");
 
-    prog = get_program(prog_num);
-    switch (g_work_type) {
-	case DEMOD_LOCK:
-	    fend_lock();
-	    break;
-	case LIVE_PLAY:
-	    play_program(prog);
-	    break;
+    if (is_live(mode)) {
+        fend_lock(fend_dev_no);
 
-	case DVR_RECORD:
-	    record_program(prog, tspath);
-	    break;
+        sprintf(cmd, "echo ts%d > /sys/class/stb/demux%d_source", FEND_DEV_NO, DMX_DEV_NO);
+        system(cmd);
 
-	case DVR_PLAY:
-	    replay_program(prog, tspath);
-	    break;
+        aml_set_ca_system_id(VMX_SYS_ID);
+        INF("%d programs scanned\r\n", aml_scan());
+        prog = aml_get_program(prog_idx);
+        INF("try to play program:%d handle:%x\r\n", prog_idx, (uint32_t)prog);
+        if (prog) {
+            start_liveplay(prog);
+        } else {
+            INF("invalid prog_idx:%x \r\n", prog_idx);
+        }
+    } else if (is_playback(mode)) {
+        INF("try to play file:%s scrambled:%d pause:0\r\n",
+            tspath, scrambled);
+
+        sprintf(cmd, "echo hiu > /sys/class/stb/demux%d_source", DMX_DEV_NO);
+        system(cmd);
+
+        start_playback(tspath, scrambled, 0);
     }
 
+    //AM_FileEcho("/sys/class/graphics/fb0/osd_display_debug", "1");
+    //AM_FileEcho("/sys/class/graphics/fb0/blank", "1");
     while ( running ) {
-        printf( "********************\n" );
-        printf( "* commands:\n" );
-        printf( "* quit\n" );
-
         char buf[256];
         memset( buf, 0 , 256 );
-        printf( "********************\n" );
 
-        if (fgets( buf, 256, stdin)) {
-            if ( !strncmp( buf, "quit", 4 ) ) {
+        INF( "********************\n" );
+        INF( "* commands:\n" );
+        INF( "* dvrrecord <dvr_dev_no> <prog_idx> <tspath>\n" );
+        INF( "* dvrstop <dvr_dev_no>\n" );
+        INF( "* quit\n" );
+        INF( "********************\n" );
+
+        if (fgets(buf, 256, stdin)) {
+            if (!strncmp(buf, "quit", 4)) {
                 running = 0;
-	    }
-	}
+            } else if (!strncmp(buf, "dvrrecord", 9)) {
+                int prog_idx;
+
+                ret = sscanf(buf, "dvrrecord %d %d %255s", &dvr_dev_no, &prog_idx, &tspath[0]);
+                if (ret == 3) {
+                    if (mode & RECORDING) {
+                        ERR("DVR already start, please stop dvr first\r\n");
+                        continue;
+                    }
+                    if (dvr_dev_no != 0) {
+                        ERR("Now, must use DVR device0\r\n");
+                        continue;
+                    }
+                    prog = aml_get_program(prog_idx);
+                    INF("try to record program:%d handle:%x\r\n", prog_idx, (uint32_t)prog);
+                    if (prog) {
+                        ret = start_recording(dvr_dev_no, prog, tspath);
+                        if (!ret) {
+                            mode |= RECORDING;
+                            pfilename = tspath;
+                            INF("recording%d started\n", dvr_dev_no);
+                        } else {
+                            ERR("start recording failed. ret:%d\r\n", ret);
+                        }
+                    } else {
+                        ERR("invalid prog_idx:%x \r\n", prog_idx);
+                    }
+                }
+            } else if (!strncmp(buf, "dvrstop", 7)) {
+                ret = sscanf(buf, "dvrstop %d", &dvr_dev_no);
+                if (ret != 1 || dvr_dev_no != 0)
+                {
+                    ERR("wrong input, cmd: dvrstop dvr_dev_no");
+                    continue;
+                }
+                if (mode & RECORDING) {
+                    ret = stop_recording(dvr_dev_no);
+                    if (!ret) {
+                        mode &= ~RECORDING;
+                        INF("recording%d stopped\n", dvr_dev_no);
+                    } else {
+                        INF("recording%d stop failed:%d\n", dvr_dev_no, ret);
+                    }
+                } else {
+                    ERR("recording%d didn't start yet\n", dvr_dev_no);
+                }
+            } else if (!strncmp(buf, "tsstart", 7)) {
+                if (has_recording(mode)) {
+                    ERR("DVR already start, please stop dvr first\n");
+                    continue;
+                }
+                if (is_live(mode)) {
+                    stop_liveplay();
+
+                    mode = TIMESHIFTING;
+                    strcpy(tspath, pfilename);
+                    start_recording(DVR_DEV_NO, prog, tspath);
+
+                    sleep(1);
+                    sprintf(cmd, "echo hiu > /sys/class/stb/demux%d_source", DMX_DEV_NO_2ND);
+                    INF("%s\n", cmd);
+                    system(cmd);
+
+                    sprintf(cmd, "echo dmx%d > /sys/class/stb/source", DMX_DEV_NO_2ND);
+                    INF("%s\n", cmd);
+                    system(cmd);
+                    start_playback(prog, prog->scrambled, 0);
+
+                } else {
+                    ERR("Not in live only mode, cannot enter timeshift\n");
+                    continue;
+                }
+            } else if (!strncmp(buf, "tsstop", 6)) {
+                if (is_timeshifting(mode)) {
+                    stop_playback();
+                    stop_recording(DVR_DEV_NO);
+
+                    mode = LIVE;
+                    start_liveplay(prog);
+                } else {
+                    ERR("Not in timeshifint mode\n");
+                    continue;
+                }
+            }
+        }
+    };
+
+    if (has_live(mode)) {
+        stop_liveplay();
     }
 
-    ret = AM_CA_StopDescrambling(g_cas_session);
-    ret |= AM_CA_CloseSession(g_cas_session);
-    if (ret) {
-	printf("CAS stop failed.\r\n");
+    if (has_recording(mode)) {
+        stop_recording(DVR_DEV_NO);
     }
 
-    AM_AV_StopTS(AV_DEV_NO);
-    AM_DVR_Close(0);
+    if (has_playback(mode)) {
+        stop_playback();
+    }
 
     AM_DSC_Close(DSC_DEV_NO);
-    AM_DMX_Close(DMX_DEV_NO);
-    AM_AV_Close(AV_DEV_NO);
 
-    exit( EXIT_SUCCESS );
+    exit(0);
 }
