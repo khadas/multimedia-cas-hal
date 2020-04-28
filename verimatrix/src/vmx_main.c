@@ -1086,10 +1086,9 @@ exit:
     if (secbuf && pSecBuf) {
         *pSecBuf = secbuf;
         *size = bufsize;
-        return (SecMemHandle)handle;
     }
 
-    return (SecMemHandle)NULL;
+    return (SecMemHandle)handle;
 }
 
 static int vmx_destroy_secmem(SecMemHandle handle)
