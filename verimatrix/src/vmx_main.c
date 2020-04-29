@@ -968,6 +968,7 @@ static int vmx_dvr_replay(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
         private_data->dat_fp = fopen(dat_fname, "r");
         if (!private_data->dat_fp) {
             CA_DEBUG(2, "%s open %s failed, %s", __func__, dat_fname, strerror(errno));
+            free_dvr_channelid(private_data->dvr_channelid);
             vmx_bc_unlock();
             return -1;
         }
