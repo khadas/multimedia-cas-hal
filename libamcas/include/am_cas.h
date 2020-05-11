@@ -65,16 +65,16 @@ typedef unsigned char uint8_t;
 
 /**\brief Service Mode of the program*/
 typedef enum {
-	SERVICE_DVB,
-	SERVICE_IPTV
+	SERVICE_DVB, /**< DTV live playing.*/
+	SERVICE_IPTV /**< IPTV.*/
 }CA_SERVICE_MODE_t;
 
 /**\brief Service type of the program*/
 typedef enum {
-	SERVICE_LIVE_PLAY,
-	SERVICE_PVR_RECORDING,
-    SERVICE_PVR_PLAY,
-    SERVICE_TYPE_INVALID
+	SERVICE_LIVE_PLAY,     /**< Live playing.*/
+	SERVICE_PVR_RECORDING, /**< PVR recording.*/
+	SERVICE_PVR_PLAY,      /**< PVR playback.*/
+	SERVICE_TYPE_INVALID   /**< Invalid type.*/
 }CA_SERVICE_TYPE_t;
 
 /**\brief Work type.*/
@@ -98,17 +98,17 @@ typedef struct {
 
 /**\brief Service descrambling information*/
 typedef struct {
-	uint16_t service_id;
-	uint8_t dmx_dev;
-	uint8_t dsc_dev;
-	uint8_t dvr_dev;
-	CA_SERVICE_MODE_t service_mode;
-	CA_SERVICE_TYPE_t service_type;
-	uint16_t ecm_pid;
-	uint16_t stream_pids[MAX_CHAN_COUNT];
-	uint32_t stream_num;
-	uint8_t ca_private_data[MAX_DATA_LEN];
-	uint8_t ca_private_data_len;
+	uint16_t service_id;  /**< The service's index.*/
+	uint8_t dmx_dev;      /**< The demux device's index.*/
+	uint8_t dsc_dev;      /**< The descrmabler device's index.*/
+	uint8_t dvr_dev;      /**< The DVR device's index.*/
+	CA_SERVICE_MODE_t service_mode; /**< Service mode.*/
+	CA_SERVICE_TYPE_t service_type; /**< Service type.*/
+	uint16_t ecm_pid;     /**< ECM's PID.*/
+	uint16_t stream_pids[MAX_CHAN_COUNT];  /**< Elementry streams' index.*/
+	uint32_t stream_num;  /**< Elementary streams' number.*/
+	uint8_t ca_private_data[MAX_DATA_LEN]; /**< Private data.*/
+	uint8_t ca_private_data_len;           /**< Private data's length.*/
 }AM_CA_ServiceInfo_t;
 
 /**\brief CAS crypto parameters*/
@@ -124,15 +124,18 @@ typedef struct AM_CA_CryptoPara_s {
 
 /**\brief Error code of the CAS-Hal module*/
 typedef enum {
-	AM_ERROR_SUCCESS,
-	AM_ERROR_NOT_LOAD,
-	AM_ERROR_NOT_SUPPORTED,
-	AM_ERROR_OVERFLOW,
-	AM_ERROR_GENERAL_ERORR
+	AM_ERROR_SUCCESS,        /**< No error.*/
+	AM_ERROR_NOT_LOAD,       /**< Dynamic library is not loaded.*/
+	AM_ERROR_NOT_SUPPORTED,  /**< The CAS is not supported.*/
+	AM_ERROR_OVERFLOW,       /**< Data overflow.*/
+	AM_ERROR_GENERAL_ERORR   /**< General error.*/
 }AM_RESULT;
 
+/**Secure memory handle.*/
 typedef size_t SecMemHandle;
+/**CAS system handle.*/
 typedef size_t CasHandle;
+/**CAS session handle.*/
 typedef size_t CasSession;
 
 /**\brief Wether the specified system id is supported
@@ -188,6 +191,7 @@ AM_RESULT AM_CA_StartDescrambling(CasSession session, AM_CA_ServiceInfo_t * serv
 AM_RESULT AM_CA_StopDescrambling(CasSession session);
 
 /**\brief Update the descrambling pid
+ * \param [in] session The opened session
  * \param[in] oldStreamPid The stream pid already set.
  * \param[in] newStreamPid The stream pid to be set.
  * \retval AM_SUCCESS On success
@@ -251,10 +255,10 @@ AM_RESULT AM_CA_DVRStopReplay(CasSession session);
 
 /**\brief Create Secmem
  * \param[in] type The binded service type
- * \param[out] pSecBuf The secure buffer address
+ * \param[out] pSecbuf The secure buffer address
  * \param[out] size The secure buffer size
  * \retval SecMemHandle On success
- * \return NULL
+ * \return NULL On error
  */
 SecMemHandle AM_CA_CreateSecmem(CA_SERVICE_TYPE_t type, void **pSecbuf, uint32_t *size);
 

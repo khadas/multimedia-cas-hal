@@ -30,7 +30,6 @@
  *
  * \li quit\n
  *             quit the test
- * \endsection
  */
 #ifndef CA_DEBUG_LEVEL
 #define CA_DEBUG_LEVEL 2
