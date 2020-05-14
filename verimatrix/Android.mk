@@ -43,7 +43,11 @@ LOCAL_STRIP_MODULE := false
 
 LOCAL_CFLAGS += -O0 -DANDROID
 
-#LOCAL_PROPRIETARY_MODULE := true
-LOCAL_PRODUCT_MODULE := true
+ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 30&& echo OK),OK)
+    LOCAL_PROPRIETARY_MODULE := true
+    LOCAL_SHARED_LIBRARIES += libsecmem libteec
+else
+    LOCAL_SHARED_LIBRARIES += libsecmem_sys libteec_sys
+endif
 
-#include $(BUILD_SHARED_LIBRARY) 
+#include $(BUILD_SHARED_LIBRARY)

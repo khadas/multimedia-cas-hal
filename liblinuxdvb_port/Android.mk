@@ -34,7 +34,9 @@ LOCAL_SHARED_LIBRARIES += liblog\
 
 LOCAL_CFLAGS += -O0
 
-#LOCAL_PROPRIETARY_MODULE := true
+ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 30&& echo OK),OK)
+    LOCAL_PROPRIETARY_MODULE := true
+endif
 
-include $(BUILD_STATIC_LIBRARY) 
+include $(BUILD_STATIC_LIBRARY)
 
