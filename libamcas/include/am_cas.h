@@ -145,13 +145,12 @@ typedef size_t CasSession;
  */
 uint8_t AM_CA_IsSystemIdSupported(int CA_system_id);
 
-/**\brief Instantiate a CA system of the specified system id
- * \param[in] CA_system_id The system id of the CA system
+/**\brief Instantiate CA system
  * \param[out] handle Return the handle of specified CA system
  * \retval AM_SUCCESS On success
  * \return Error code
  */
-AM_RESULT AM_CA_Init(int CA_system_id, CasHandle* handle);
+AM_RESULT AM_CA_Init(CasHandle* handle);
 
 /**\brief Terminate a CA system
  * \param[in] handle The CasHandle of specified CA system

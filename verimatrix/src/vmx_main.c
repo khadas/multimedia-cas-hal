@@ -90,7 +90,6 @@ typedef struct {
     void *secbuf;
 }secmem_handle_t;
 
-struct AM_CA_Impl_t * get_cas_ops(void);
 static int vmx_pre_init(void);
 static int vmx_init(CasHandle handle);
 static int vmx_term(CasHandle handle);
@@ -126,7 +125,7 @@ enum {
     SECMEM_SOURCE_CODEC_MM
 };
 
-const struct AM_CA_Impl_t vmx_cas_ops =
+const struct AM_CA_Impl_t cas_ops =
 {
 .pre_init = vmx_pre_init,
 .init = vmx_init,
@@ -153,11 +152,6 @@ static vmx_svc_idx_t g_svc_idx[MAX_CHAN_COUNT];
 static vmx_dvr_channelid_t g_dvr_channelid[MAX_CHAN_COUNT];
 static pthread_t bcThread = ( pthread_t )NULL;
 static pthread_mutex_t vmx_bc_mutex = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
-
-struct AM_CA_Impl_t * get_cas_ops(void)
-{
-    return &vmx_cas_ops;
-}
 
 int vmx_file_echo(const char *name, const char *cmd)
 {
@@ -433,6 +427,8 @@ void vmx_bc_unlock(void)
 
 static void *bcHandlingThread(void *pParam)
 {
+    UNUSED(pParam);
+
     CA_DEBUG( 0, "BC thread is called\n" );
     while ( 1 ) {
         vmx_bc_lock();
@@ -468,7 +464,7 @@ static void print_scinfo(void)
 
 static int vmx_pre_init(void)
 {
-    int16_t bcRet;
+    int bcRet;
     uint8_t version[32];
     uint8_t date[20];
     uint8_t timestr[20];
@@ -498,6 +494,7 @@ static int vmx_init(CasHandle handle)
 {
     uint8_t *buf = NULL;
 
+    UNUSED(handle);
     CA_DEBUG(0, "%s", __func__);
 
     g_dvr_shm = (uint8_t *)ree_shm_alloc(DVR_SIZE);
@@ -515,6 +512,8 @@ static int vmx_init(CasHandle handle)
 
 static int vmx_term(CasHandle handle)
 {
+    UNUSED(handle);
+
     CA_uninit();
     vmx_port_deinit();
     pthread_join(bcThread, NULL);
@@ -679,6 +678,8 @@ static int vmx_stop_descrambling(CasSession session)
 
 static int vmx_set_emm_pid(CasHandle handle, uint16_t emmPid)
 {
+    UNUSED(handle);
+
     vmx_bc_lock();
     BC_SetEMM_Pid(emmPid);
     vmx_bc_unlock();
@@ -877,7 +878,6 @@ static int vmx_dvr_decrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
     uint16_t rc;
     shm_r2r_t shm_in, shm_out;
     VMX_PrivateInfo_t * private_data;
-    vmx_crypto_storeinfo_t storeinfo;
 
     if (cryptoPara->buf_len > DVR_SIZE) {
 	CA_DEBUG(2, "decrypt buffer overflow DVR_SIZE");
@@ -886,12 +886,6 @@ static int vmx_dvr_decrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 
     vmx_bc_lock();
     private_data = (VMX_PrivateInfo_t *)((CAS_SessionInfo_t *)session)->private_data;
-
-    //vmx_get_storeinfo(&private_data->storeinfo_ctx, cryptoPara->offset, &storeinfo);
-    //if () {
-        //TODO:replay with updated StoreInfo
-    //}
-
 
     memcpy(private_data->dvr_shm, (void *)cryptoPara->buf_in.addr, cryptoPara->buf_in.size);
     memset(&shm_in, 0x0, sizeof(shm_r2r_t));

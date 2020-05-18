@@ -28,13 +28,14 @@
 #define CA_DEBUG_LEVEL 2
 #endif
 
-#define DYNAMIC_LOAD
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 #include <dlfcn.h>
+#include <errno.h>
+#include <dirent.h>
+#include <sys/stat.h>
 
 #include "am_cas.h"
 #include "am_cas_internal.h"
@@ -42,33 +43,38 @@
 static void *dl_handle = NULL;
 struct AM_CA_Impl_t *cas_ops = NULL;
 uint8_t g_cas_loaded = 0;
-extern struct AM_CA_Impl_t *get_cas_ops(void);
 
-int loadAllCASLibraries(void)
+int loadCASLibrary(void)
 {
-#ifdef DYNAMIC_LOAD
-    //TODO: now only load verimatrix CAS
-    dl_handle = dlopen("libvmx_dvb.so", RTLD_NOW);
-    if (!dl_handle) {
-	CA_DEBUG(2, "%s , failed to open lib %s\r\n", __func__, dlerror());
-	return -1;
-    }
+    DIR *dir = NULL;
+    struct dirent *dp = NULL;
+    char *path = "/product/lib";
 
-    cas_ops = (struct AM_CA_Impl_t *)dlsym(dl_handle, "vmx_cas_ops");
-    if (!cas_ops) {
-        CA_DEBUG(2, "%s, failed to get cas_ops\r\n", __func__);
-        dlclose(dl_handle);
+    if (!(dir = opendir(path))) {
+        CA_DEBUG(2, "opendir[%s] failed, %s", path, strerror(errno));
         return -1;
     }
-#else
-    cas_ops = get_cas_ops();
-    if (!cas_ops) {
-	CA_DEBUG(2, "CAS get ops failed");
-    }
-#endif
-    g_cas_loaded = 1;
 
-    return cas_ops->pre_init();
+    while ((dp = readdir(dir))) {
+        const char *pfile = strrchr(dp->d_name, '_');
+        if (pfile && (strcmp(pfile, "_dvb.so") == 0)) {
+            CA_DEBUG(0, "CAS library %s found", dp->d_name);
+            if (!(dl_handle = dlopen(dp->d_name, RTLD_NOW))) {
+                CA_DEBUG(2, "dlopen %s failed, %s", dp->d_name, strerror(errno));
+                continue;
+            }
+            if (!(cas_ops = (struct AM_CA_Impl_t *)dlsym(dl_handle, "cas_ops"))) {
+                CA_DEBUG(2, "dlsym cas_ops failed, %s", strerror(errno));
+                dlclose(dl_handle);
+                continue;
+            }
+
+            g_cas_loaded = 1;
+            return cas_ops->pre_init();
+        }
+    }
+
+    return -1;
 }
 
 /**\brief Wether the specified system id is supported
@@ -80,46 +86,41 @@ int loadAllCASLibraries(void)
 uint8_t AM_CA_IsSystemIdSupported(int CA_system_id)
 {
     if (!g_cas_loaded) {
-	loadAllCASLibraries();
+        loadCASLibrary();
     }
 
     if (cas_ops && cas_ops->isSystemIdSupported) {
-	return cas_ops->isSystemIdSupported(CA_system_id);
+        return cas_ops->isSystemIdSupported(CA_system_id);
     }
+
     return 0;
 }
 
-/**\brief Instantiate a CA system of the specified system id
- * \param CA_system_id handle
- * \param[in] CA_system_id The system id of the CA system
+/**\brief Instantiate CA system
  * \param[out] handle Return the handle of specified CA system
  * \retval AM_SUCCESS On success
  * \return Error code
  */
-AM_RESULT AM_CA_Init(int CA_system_id, CasHandle* handle)
+AM_RESULT AM_CA_Init(CasHandle* handle)
 {
     int ret = 0;
     CAS_ASSERT(handle);
 
     if (g_cas_loaded) {
-	CA_DEBUG(2, "CAS loaded already, return");
-	return AM_ERROR_SUCCESS;
+        CA_DEBUG(2, "CAS loaded already, return");
+        return AM_ERROR_SUCCESS;
     }
 
-    ret = loadAllCASLibraries();
+    ret = loadCASLibrary();
     if (ret) {
-	CA_DEBUG(2, "CAS load failed or pre-init failed.");
-	return AM_ERROR_NOT_LOAD;
-    }
-
-    if(!AM_CA_IsSystemIdSupported(CA_system_id)) {
-	printf("[CAS] %#x not supported\r\n", CA_system_id);
-	return AM_ERROR_NOT_SUPPORTED;
+        CA_DEBUG(2, "CAS load failed or pre-init failed.");
+        *handle = (CasHandle)NULL;
+        return AM_ERROR_NOT_LOAD;
     }
 
     if (cas_ops && cas_ops->init) {
-	*handle = (CasHandle)malloc(sizeof(CAS_CasInfo_t));
-	return cas_ops->init(*handle);
+        *handle = (CasHandle)malloc(sizeof(CAS_CasInfo_t));
+        return cas_ops->init(*handle);
     }
 
     return AM_ERROR_SUCCESS;
