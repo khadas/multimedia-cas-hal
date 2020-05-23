@@ -17,6 +17,7 @@
 #include "caclientapi.h"
 #include "vmx_porting.h"
 #include "am_cas.h"
+#include "am_cas_internal.h"
 
 #define SMC_DEV_NO (0)
 #define DMX_DEV_NO (2)
@@ -28,11 +29,6 @@
 #define MAX_EMM_BUF_SIZE		(512*1024)
 #define MAX_EMM_SECTION_SIZE 	256
 #define MAX_NVM_BLOCK_NUM		10
-#ifndef __ANDROID__
-    #define AM_NVM_FILE	 			"/var/nv/vmx_nvram"
-#else
-    #define AM_NVM_FILE	 			"/data/vmx_nvram"
-#endif
 
 static int am_emm_buf_init();
 static void ( *am_smc_notify )() = NULL ;
@@ -844,7 +840,7 @@ int16_t  SYS_ReadNvmData( uint8_t bBlockId, uint8_t *pabDest, uint16_t wLength )
 
     fp = fopen( fname, "rb" );
     if ( !fp ) {
-        CA_DEBUG( 2, "cannot open %d" , __LINE__);
+        CA_DEBUG( 2, "cannot open %s, l%d" , fname, __LINE__);
         return k_BcSuccess;
     }
 

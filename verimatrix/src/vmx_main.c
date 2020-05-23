@@ -16,6 +16,7 @@
 #include <errno.h>
 #include <sys/un.h>
 #include <list.h>
+#include <cutils/properties.h>
 
 #include "bc_consts.h"
 #include "bc_main.h"
@@ -150,7 +151,8 @@ const struct AM_CA_Impl_t cas_ops =
 static uint8_t *g_dvr_shm = NULL;
 static vmx_svc_idx_t g_svc_idx[MAX_CHAN_COUNT];
 static vmx_dvr_channelid_t g_dvr_channelid[MAX_CHAN_COUNT];
-static pthread_t bcThread = ( pthread_t )NULL;
+static pthread_t indiv_thread = (pthread_t)NULL;
+static pthread_t bcThread = (pthread_t)NULL;
 static pthread_mutex_t vmx_bc_mutex = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
 
 int vmx_file_echo(const char *name, const char *cmd)
@@ -439,6 +441,43 @@ static void *bcHandlingThread(void *pParam)
     return NULL;
 }
 
+static void* vmx_indiv_thread(void *arg)
+{
+    int ret;
+    char ip[PROPERTY_VALUE_MAX] = {0};
+    char *vendorid = "/system/bin/vendorid.bin";
+    char *vendordata = "/system/bin/vendordata.bin";
+    char *providerid = "/system/bin/providerid.bin";
+    char *providerdata = "/system/bin/providerdata.bin";
+    char *datafile = "/system/bin/datafile.dat";
+    char cmd[512] = {0};
+
+    while (1) {
+        ret = property_get("vmx.indiv.server.ip", ip, NULL);
+        if (ret) {
+            CA_DEBUG(0, "vmx indiv ip:%s", ip);
+            break;
+        } else {
+            sleep(1);
+            CA_DEBUG(0, "Please setprop vmx.indiv.server.ip for Verimatrix individualization");
+        }
+    }
+
+    CA_DEBUG(0, "Welcome to Verimatrix individualization");
+    sprintf(cmd, "vmx_indiv %s %s %s %s %s %s",
+            ip, vendorid, vendordata,
+            providerid, providerdata, datafile);
+    CA_DEBUG(0, "%s", cmd);
+    ret = system(cmd);
+    if (ret == 0) {
+        CA_DEBUG(0, "Verimatrix individualization successed");
+    } else {
+        CA_DEBUG(2, "Verimatrix individualization failed. ret:%d", ret);
+    }
+
+    return NULL;
+}
+
 static void print_scinfo(void)
 {
     uint8_t ser[35] = {0};
@@ -469,20 +508,31 @@ static int vmx_pre_init(void)
     uint8_t date[20];
     uint8_t timestr[20];
 
+    char path[64];
+    int fileid = 0;
+    struct stat buf;
+
+    sprintf(path, "%s%d", AM_NVM_FILE, fileid);
+    bcRet = stat(path, &buf);
+    if (bcRet == -1 && errno == ENOENT) {
+        CA_DEBUG(0, "%s not exist", path);
+        pthread_create(&indiv_thread, NULL, vmx_indiv_thread, NULL);
+        return -1;
+    }
+    CA_DEBUG(0, "stat %s, ret:%d", path, bcRet);
+
     CA_init();
     vmx_port_init();
 
     vmx_bc_lock();
     bcRet = BC_Init();
-    vmx_bc_unlock();
     CA_DEBUG(0, "BC-Init: %04x\n", (uint16_t)bcRet);
 
-    vmx_bc_lock();
     BC_GetVersion(version, date, timestr );
-    vmx_bc_unlock();
     CA_DEBUG(0, "ver %s %s %s\n", version, date, timestr);
 
     BC_InitWindow(1920, 1080, NULL);
+    vmx_bc_unlock();
 
     pthread_create( &bcThread, NULL, bcHandlingThread, NULL );
     print_scinfo();

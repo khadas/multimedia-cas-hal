@@ -151,7 +151,7 @@ static int dvb_init(void)
 
     AM_DSC_SetSource(DSC_DEV_NO, AM_DSC_SRC_DMX0);
 
-    ret = AM_CA_Init(VMX_SYS_ID, &g_cas_handle);
+    ret = AM_CA_Init(&g_cas_handle);
     if (ret) {
         ERR("CAS init failed. ret = %d\r\n", ret);
     }
