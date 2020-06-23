@@ -200,11 +200,12 @@ AM_RESULT AM_CA_UpdateDescramblingPid(CasSession session, uint16_t oldStreamPid,
 
 /**\brief Set EMM Pid for the specified CA system
  * \param[in] handle The handle of initialized CA system
+ * \param[in] dmx_dev The demux device on which to filter emm
  * \param[in] emmPid The emmPid of current ts
  * \retval AM_SUCCESS On success
  * \return Error code
  */
-AM_RESULT AM_CA_SetEmmPid(CasHandle handle, uint16_t emmPid);
+AM_RESULT AM_CA_SetEmmPid(CasHandle handle, int dmx_dev, uint16_t emmPid);
 
 /**\brief Start DVR for the specified session of the CA system
  * \param[in] session The opened session

@@ -24,6 +24,8 @@
 #include "am_cas.h"
 #include "am_cas_internal.h"
 
+#define DSC_DEV_COUNT (2)
+#define DMX_DEV_COUNT (3)
 #define DVR_SIZE (1024*1024)
 #define MAX_STOREINFO_LEN (1024)
 
@@ -42,6 +44,16 @@ typedef struct {
        uint8_t *vaddr;
        uint32_t size;
 } shm_r2r_t;
+
+typedef struct dsc_dev {
+    int dmx_dev;
+    int ref_cnt;
+} dsc_dev_t;
+
+typedef struct {
+    int dmx_dev;
+    uint16_t emmpid;
+}vmx_emm_info_t;
 
 typedef struct vmx_svc_idx {
     int used;
@@ -77,6 +89,7 @@ typedef struct {
     int dsc_svc_handle;
     int dsc_chan_handle[MAX_CHAN_COUNT];
     int dsc_chan_count;
+    int emm_pid;
     uint8_t *dvr_shm;
     uint8_t dvr_channelid;
 
@@ -100,7 +113,7 @@ static int vmx_close_session(CasSession session);
 static int vmx_start_descrambling(CasSession session, AM_CA_ServiceInfo_t *serviceInfo);
 static int vmx_update_descrambling_pid(CasSession session, uint16_t oldStreamPid, uint16_t newStreamPid);
 static int vmx_stop_descrambling(CasSession session);
-static int vmx_set_emm_pid(CasHandle handle, uint16_t emmPid);
+static int vmx_set_emm_pid(CasHandle handle, int dmx_dev, uint16_t emmPid);
 static int vmx_dvr_start(CasSession session, AM_CA_ServiceInfo_t *service_info);
 static int vmx_dvr_stop(CasSession session);
 static int vmx_dvr_encrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara);
@@ -149,6 +162,8 @@ const struct AM_CA_Impl_t cas_ops =
 };
 
 static uint8_t *g_dvr_shm = NULL;
+static dsc_dev_t g_dsc_dev[DSC_DEV_COUNT];
+static vmx_emm_info_t g_emm_info[DMX_DEV_COUNT];
 static vmx_svc_idx_t g_svc_idx[MAX_CHAN_COUNT];
 static vmx_dvr_channelid_t g_dvr_channelid[MAX_CHAN_COUNT];
 static pthread_t indiv_thread = (pthread_t)NULL;
@@ -349,6 +364,66 @@ static void free_service_idx(int idx)
     CA_DEBUG(0, "free vmx svc idx failed.");
 }
 
+static int alloc_dsc_dev(int dmx_dev)
+{
+    int i;
+    dsc_dev_t *dsc = NULL;
+
+    for (i = 0; i < DSC_DEV_COUNT; i++) {
+	dsc = &g_dsc_dev[i];
+	if (dsc->ref_cnt > 0 && dsc->dmx_dev == dmx_dev) {
+	    g_dsc_dev[i].ref_cnt++;
+	    CA_DEBUG(0, "use alloced dsc%d for dmx%d", i, dmx_dev);
+	    return i;
+	}
+    }
+
+    for (i = 0; i < DSC_DEV_COUNT; i++) {
+	dsc = &g_dsc_dev[i];
+	if (dsc->ref_cnt <= 0) {
+	    dsc->dmx_dev = dmx_dev;
+	    dsc->ref_cnt++;
+	    CA_DEBUG(0, "alloc dsc%d for dmx%d", i, dmx_dev);
+	    return i;
+	}
+    }
+
+    CA_DEBUG(1, "alloc dsc device for dmx%d failed. use fixed dsc0", dmx_dev);
+    return 0;
+}
+
+static void free_dsc_dev(int dsc_dev)
+{
+    dsc_dev_t *dsc = NULL;
+
+    if (dsc_dev >= DSC_DEV_COUNT) {
+	CA_DEBUG(0, "%s invalid dsc dev:%d", __func__, dsc_dev);
+	return;
+    }
+
+    dsc = &g_dsc_dev[dsc_dev];
+    if (dsc->ref_cnt) {
+	dsc->ref_cnt--;
+	CA_DEBUG(0, "free dsc%d, ref_cnt:%d", dsc_dev, dsc->ref_cnt);
+    }
+
+    return;
+}
+
+static int store_emm_info(int dmx_dev, uint16_t emm_pid)
+{
+    int i;
+
+    if (dmx_dev >= DMX_DEV_COUNT) {
+	CA_DEBUG(1, "invalid dmx_dev:%d for emm:%#x", dmx_dev, emm_pid);
+	return -1;
+    }
+
+    g_emm_info[dmx_dev].emmpid = emm_pid;
+    CA_DEBUG(1, "store emmpid[%#x] on dmx%d", emm_pid, dmx_dev);
+    return 0;
+}
+
 int get_dmx_dev(int svc_idx)
 {
     VMX_PrivateInfo_t *vmx_pri_info = NULL;
@@ -358,12 +433,28 @@ int get_dmx_dev(int svc_idx)
     for (i = 0; i < MAX_CHAN_COUNT; i++) {
         if (g_svc_idx[i].used && (i == svc_idx)) {
             vmx_pri_info = ((CAS_SessionInfo_t *)g_svc_idx[i].session)->private_data;
+	    CA_DEBUG(0, "find svc_idx[%d], dmx_dev[%d]", svc_idx, vmx_pri_info->dmx_dev);
             return vmx_pri_info->dmx_dev;
         }
     }
 
     CA_DEBUG(0, "svc idx[%d] not found", svc_idx);
     return -1;
+}
+
+int find_dmx_dev(uint16_t emm_pid)
+{
+    int i;
+
+    for (i = 0; i < DMX_DEV_COUNT; i++) {
+	if (g_emm_info[i].emmpid == emm_pid) {
+	    CA_DEBUG(0, "emmpid[%#x] found on dmx%d", emm_pid, i);
+	    return i;
+	}
+    }
+
+    CA_DEBUG(1, "emmpid[%#x] not found, use default dmx0", emm_pid);
+    return 0;
 }
 
 static int alloc_dvr_channelid(void)
@@ -390,7 +481,7 @@ static void free_dvr_channelid(int id)
 	if (g_dvr_channelid[i].used && (i == id)) {
 	    CA_DEBUG(0, "freed dvr channelid %d", i);
 	    g_dvr_channelid[i].used = 0;
-	    break;
+	    return;
 	}
     }
 
@@ -542,6 +633,7 @@ static int vmx_pre_init(void)
 
 static int vmx_init(CasHandle handle)
 {
+    int i, j;
     uint8_t *buf = NULL;
 
     UNUSED(handle);
@@ -554,6 +646,15 @@ static int vmx_init(CasHandle handle)
 	    CA_DEBUG(0, "CA get secure buffer failed");
 	    return -1;
     }
+
+    for (i = 0; i < DSC_DEV_COUNT; i++) {
+	for (j = 0; j < MAX_CHAN_COUNT; j++) {
+	    CA_DscClose(i, j);
+	}
+    }
+    memset(g_dsc_dev, 0, sizeof(dsc_dev_t)*DSC_DEV_COUNT);
+    memset(g_emm_info, 0, sizeof(vmx_emm_info_t)*DMX_DEV_COUNT);
+
     vmx_file_echo("/sys/class/stb/dsc0_source", "dmx0");
     vmx_file_echo("/sys/class/stb/dsc1_source", "dmx1");
 
@@ -624,6 +725,7 @@ static int vmx_close_session(CasSession session)
 
 static int vmx_start_descrambling(CasSession session, AM_CA_ServiceInfo_t *serviceInfo)
 {
+    char buf[64], src[64];
     uint8_t *p;
     int i, ret;
     int dsc_chan_handle = 0;
@@ -634,6 +736,10 @@ static int vmx_start_descrambling(CasSession session, AM_CA_ServiceInfo_t *servi
     uint16_t streamPid[MAX_CHAN_COUNT];
 
     vmx_pri_info = ((CAS_SessionInfo_t *)session)->private_data;
+    serviceInfo->dsc_dev = alloc_dsc_dev(serviceInfo->dmx_dev);
+    snprintf(buf, sizeof(buf), "/sys/class/stb/dsc%d_source", serviceInfo->dsc_dev);
+    snprintf(src, sizeof(src), "dmx%d", serviceInfo->dmx_dev);
+    vmx_file_echo(buf, src);
     memcpy(&(((CAS_SessionInfo_t *)session)->service_info), (void *)serviceInfo, sizeof(AM_CA_ServiceInfo_t));
     memset(&ca_svc_info, 0x0, sizeof(ca_service_info_t));
     for (i = 0; i < serviceInfo->stream_num; i++) {
@@ -643,6 +749,9 @@ static int vmx_start_descrambling(CasSession session, AM_CA_ServiceInfo_t *servi
 	    ca_svc_info.channel[i] = dsc_chan_handle;
 	    vmx_pri_info->dsc_chan_count++;
 	    vmx_pri_info->dsc_chan_handle[i] = dsc_chan_handle;
+	    CA_DEBUG(1, "CA_DscOpen(%d, %d) ok.", serviceInfo->dsc_dev, dsc_chan_handle);
+	} else {
+	    CA_DEBUG(1, "CA_DscOpen(%d) failed.", serviceInfo->dsc_dev);
 	}
 
 	ca_svc_info.pid[i] = serviceInfo->stream_pids[i];
@@ -720,17 +829,19 @@ static int vmx_stop_descrambling(CasSession session)
     }
 
     free_service_idx(private_data->service_index);
+    free_dsc_dev(((CAS_SessionInfo_t *)session)->service_info.dsc_dev);
 
     vmx_bc_unlock();
 
     return 0;
 }
 
-static int vmx_set_emm_pid(CasHandle handle, uint16_t emmPid)
+static int vmx_set_emm_pid(CasHandle handle, int dmx_dev, uint16_t emmPid)
 {
     UNUSED(handle);
 
     vmx_bc_lock();
+    store_emm_info(dmx_dev, emmPid);
     BC_SetEMM_Pid(emmPid);
     vmx_bc_unlock();
 

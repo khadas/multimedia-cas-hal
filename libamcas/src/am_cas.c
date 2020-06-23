@@ -59,7 +59,7 @@ int loadCASLibrary(void)
         const char *pfile = strrchr(dp->d_name, '_');
         if (pfile && (strcmp(pfile, "_dvb.so") == 0)) {
             CA_DEBUG(0, "CAS library %s found", dp->d_name);
-            if (!(dl_handle = dlopen(dp->d_name, RTLD_NOW))) {
+            if (!(dl_handle = dlopen(dp->d_name, RTLD_NOW | RTLD_GLOBAL))) {
                 CA_DEBUG(2, "dlopen %s failed, %s", dp->d_name, strerror(errno));
                 continue;
             }
@@ -259,12 +259,12 @@ AM_RESULT AM_CA_UpdateDescramblingPid(CasSession session, uint16_t oldStreamPid,
  * \retval AM_SUCCESS On success
  * \return Error code
  */
-AM_RESULT AM_CA_SetEmmPid(CasHandle handle, uint16_t emmPid)
+AM_RESULT AM_CA_SetEmmPid(CasHandle handle, int dmx_dev, uint16_t emmPid)
 {
     CAS_ASSERT(handle);
 
     if (cas_ops && cas_ops->set_emm_pid) {
-	return cas_ops->set_emm_pid(handle, emmPid);
+	return cas_ops->set_emm_pid(handle, dmx_dev, emmPid);
     }
 
     return AM_ERROR_NOT_LOAD;
