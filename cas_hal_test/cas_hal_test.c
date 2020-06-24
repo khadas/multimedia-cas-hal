@@ -56,6 +56,7 @@
 #endif
 
 #include "am_cas.h"
+#include "cas_json.h"
 #include "cas_scan.h"
 
 #define INF(fmt, ...)       fprintf(stdout, fmt, ##__VA_ARGS__)
@@ -70,6 +71,8 @@
 #define DVR_DEV_NO (0)
 
 #define VMX_SYS_ID (0x1724)
+#define VMX_CAS_STRING "Verimatrix"
+
 #define DVR_BUFFER_SIZE (512*1024)
 #define RECORD_BLOCK_SIZE (256*1024)//same to asyncfifo flush size, it's enc block size and dec block size//65424
 
@@ -152,12 +155,14 @@ static int dvb_init(void)
     AM_DSC_SetSource(DSC_DEV_NO, AM_DSC_SRC_DMX0);
 
     ret = AM_CA_Init(&g_cas_handle);
-    if (ret) {
-        ERR("CAS init failed. ret = %d\r\n", ret);
-    }
+    INF("CAS init ret = %d\r\n", ret);
 
-    INF("dvb init done\r\n");
+    return 0;
+}
 
+static AM_RESULT cas_event_cb(CasSession session, char *json)
+{
+    CA_DEBUG(0, "%s:\n%s", __func__, json);
     return 0;
 }
 
@@ -420,7 +425,7 @@ static int start_liveplay(dvb_service_info_t *prog)
     if (!prog->scrambled)
         return 0;
 
-    ret = AM_CA_SetEmmPid(g_cas_handle, prog->i_ca_pid);
+    ret = AM_CA_SetEmmPid(g_cas_handle, DMX_DEV_NO, prog->i_ca_pid);
     if (ret) {
         ERR("CAS set emm PID failed. ret = %d\r\n", ret);
         return -1;
@@ -429,6 +434,12 @@ static int start_liveplay(dvb_service_info_t *prog)
     ret = AM_CA_OpenSession(g_cas_handle, &play.cas_session);
     if (ret) {
         ERR("CAS open session failed. ret = %d\r\n", ret);
+        return -1;
+    }
+
+    ret = AM_CA_RegisterEventCallback(play.cas_session, cas_event_cb);
+    if (ret) {
+        ERR("CAS RegisterEventCallback failed. ret = %d\r\n", ret);
         return -1;
     }
 
@@ -541,7 +552,7 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
             return -1;
         }
 
-        error = AM_CA_SetEmmPid(g_cas_handle, prog->i_ca_pid);
+        error = AM_CA_SetEmmPid(g_cas_handle, DMX_DEV_NO, prog->i_ca_pid);
         if (error) {
             ERR("CAS set emm PID failed. ret = %d\r\n", error);
             return -1;
@@ -588,6 +599,31 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
       AM_CA_DestroySecmem(recorder.secmem_session);
       recorder.secmem_session = (SecMemHandle)NULL;
       return -1;
+    }
+
+    return 0;
+}
+
+static int show_cardno(void)
+{
+    const cJSON *input = NULL;
+    const cJSON *output = NULL;
+    const cJSON *cas = NULL;
+    const cJSON *cmd = NULL;
+    const cJSON *type = NULL;
+    char in_json[MAX_JSON_LEN];
+    char out_json[MAX_JSON_LEN];
+
+    input = cJSON_CreateObject();
+    cas = cJSON_CreateString(VMX_CAS_STRING);
+    cJSON_AddItemToObject(input, ITEM_CAS, cas);
+    cmd = cJSON_CreateString(ITEM_GETSCNO);
+    cJSON_AddItemToObject(input, ITEM_CMD, cmd);
+    cJSON_PrintPreallocated(input, in_json, MAX_JSON_LEN, 1);
+    INF( "in_json:\n%s\n", in_json);
+    if (play.cas_session) { 
+	AM_CA_Ioctl(play.cas_session, in_json, out_json, MAX_JSON_LEN);
+	INF( "out_json:\n%s\n", out_json);
     }
 
     return 0;
@@ -1035,7 +1071,9 @@ int main(int argc, char *argv[])
                     ERR("Not in timeshifint mode\n");
                     continue;
                 }
-            }
+            } else if (!strncmp(buf, "cardno", 6)) {
+		show_cardno();
+	    }
         }
     };
 

@@ -26,6 +26,7 @@
 
 #define DVR_SIZE (1024*1024)
 #define MAX_STOREINFO_LEN (1024)
+#define VMX_CAS_STRING "Verimatrix"
 
 #define SHM_R2R_MAGIC           0x00523252
 #define SHM_R2R_TYPE_REE        0x01
@@ -84,6 +85,8 @@ typedef struct {
     FILE *dat_fp;
     int segment_id;
     vmx_crypto_storeinfo_t storeinfo_ctx;
+
+    CAS_EventFunction_t event_cb;
 }VMX_PrivateInfo_t;
 
 typedef struct {
@@ -109,11 +112,16 @@ static int vmx_dvr_replay(CasSession session, AM_CA_CryptoPara_t *cryptoPara);
 static int vmx_dvr_stop_replay(CasSession session);
 static SecMemHandle vmx_create_secmem(CA_SERVICE_TYPE_t type, void **pSecBuf, uint32_t *size);
 static int vmx_destroy_secmem(SecMemHandle handle);
+static int vmx_register_event_cb(CasSession session, CAS_EventFunction_t event_fn);
+static int vmx_ioctl(CasSession session, const char *in_json, const char *out_json, uint32_t out_len);
+static char *vmx_get_version(void);
+
 static int vmx_file_echo(const char *name, const char *cmd);
 static int vmx_get_fname(char fname[MAX_LOCATION_SIZE],
     const char location[MAX_LOCATION_SIZE],
     uint64_t segment_id);
 
+extern int vmx_interact_ioctl(CasSession session, const char *in_json, const char *out_json, uint32_t out_len);
 /*Sec mem V2, open once session can only alloc once mem, no free API, close session will free it*/
 extern uint32_t Secure_V2_Init(void *session, uint32_t source,
   uint32_t flags, uint32_t paddr, uint32_t msize);
@@ -145,9 +153,13 @@ const struct AM_CA_Impl_t cas_ops =
 .dvr_replay = vmx_dvr_replay,
 .dvr_stop_replay = vmx_dvr_stop_replay,
 .create_secmem = vmx_create_secmem,
-.destroy_secmem = vmx_destroy_secmem
+.destroy_secmem = vmx_destroy_secmem,
+.register_event_cb = vmx_register_event_cb,
+.ioctl = vmx_ioctl,
+.get_version = vmx_get_version
 };
 
+static CAS_EventFunction_t g_event_cb;
 static uint8_t *g_dvr_shm = NULL;
 static vmx_svc_idx_t g_svc_idx[MAX_CHAN_COUNT];
 static vmx_dvr_channelid_t g_dvr_channelid[MAX_CHAN_COUNT];
@@ -322,7 +334,7 @@ static int alloc_service_idx(CasSession session)
 
     for (i = 0; i < MAX_CHAN_COUNT; i++) {
 	if (!g_svc_idx[i].used) {
-	    CA_DEBUG(0, "allocated vmx svc idx %d", i);
+	    CA_DEBUG(0, "allocated vmx svc idx %d. private_data:%#x", i, (VMX_PrivateInfo_t *)((CAS_SessionInfo_t *)session)->private_data);
 	    g_svc_idx[i].used = 1;
 	    g_svc_idx[i].session = session;
 	    return i;
@@ -347,6 +359,43 @@ static void free_service_idx(int idx)
     }
 
     CA_DEBUG(0, "free vmx svc idx failed.");
+}
+
+CasSession get_service_session(int idx)
+{
+    if (g_svc_idx[idx].used) {
+	return g_svc_idx[idx].session;
+    }
+
+    return (CasSession)NULL;
+}
+
+int get_service_idx(CasSession session)
+{
+    int i;
+
+    for (i = 0; i < MAX_CHAN_COUNT; i++) {
+	if (g_svc_idx[i].used &&
+	    g_svc_idx[i].session == session) {
+	    return i;
+	}
+    }
+
+    CA_DEBUG(0, "%s not found session:%#x", __func__, session);
+    return -1;
+}
+
+CAS_EventFunction_t get_service_event_cb(int idx)
+{
+    CasSession session;
+    VMX_PrivateInfo_t *private_data;
+
+    if (g_svc_idx[idx].used) {
+	session = g_svc_idx[idx].session;
+	private_data = (VMX_PrivateInfo_t *)((CAS_SessionInfo_t *)session)->private_data;
+	return private_data->event_cb;
+    }
+    return NULL;
 }
 
 int get_dmx_dev(int svc_idx)
@@ -604,6 +653,7 @@ static int vmx_open_session(CasHandle handle, CasSession session)
     vmx_pri_info->dvr_channelid = -1;
     vmx_pri_info->dat_fp = NULL;
     vmx_pri_info->segment_id = -1;
+    vmx_pri_info->event_cb = NULL;
     memset(&vmx_pri_info->storeinfo_ctx, 0, sizeof(vmx_crypto_storeinfo_t));
     ((CAS_SessionInfo_t *)session)->private_data = vmx_pri_info;
 
@@ -1144,4 +1194,30 @@ static int vmx_destroy_secmem(SecMemHandle handle)
     free((void *)handle);
 
     return ret;
+}
+
+static int vmx_register_event_cb(CasSession session, CAS_EventFunction_t event_fn)
+{
+    VMX_PrivateInfo_t *private_data;
+
+    vmx_bc_lock();
+    if (!session) {
+	g_event_cb = event_fn;
+    } else {
+	private_data = (VMX_PrivateInfo_t *)((CAS_SessionInfo_t *)session)->private_data;
+	private_data->event_cb = event_fn;
+    }
+    vmx_bc_unlock();
+
+    return 0;
+}
+
+static int vmx_ioctl(CasSession session, const char *in_json, const char *out_json, uint32_t out_len)
+{
+    return vmx_interact_ioctl(session, in_json, out_json, out_len);
+}
+
+static char *vmx_get_version(void)
+{
+    return CAS_HAL_VER;
 }

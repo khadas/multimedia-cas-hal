@@ -33,6 +33,8 @@
     #define AM_NVM_FILE	 			"/data/vmx_nvram"
 #endif
 
+#define CAS_HAL_VER "0.1.0"
+
 typedef struct {
    void *private_data;
 }CAS_CasInfo_t;
@@ -83,6 +85,12 @@ struct AM_CA_Impl_t
     int (*dvr_stop_replay)(CasSession session);
     SecMemHandle (*create_secmem)(CA_SERVICE_TYPE_t type, void **pSecBuf, uint32_t *size);
     int (*destroy_secmem)(SecMemHandle handle);
+
+    int (*register_event_cb)(CasSession session, CAS_EventFunction_t event_fn);
+    int (*ioctl)(CasSession session, const char *in_json, const char *out_json, uint32_t out_len);
+    int (*isNeedWholeSection)(void);
+    int (*report_section)(AM_CA_SecAttr_t *pAttr, uint8_t *pData, uint16_t len);
+    char* (*get_version)(void);
 };
 
 #endif

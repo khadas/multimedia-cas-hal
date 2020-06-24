@@ -70,6 +70,13 @@ int loadCASLibrary(void)
             }
 
             g_cas_loaded = 1;
+
+	    if (strcmp(cas_ops->get_version(), CAS_HAL_VER)) {
+		CA_DEBUG(1, "%s cas library[%s] and cas hal[%s] not matched",
+			cas_ops->get_version(), CAS_HAL_VER);
+
+		return -1;
+	    }
             return cas_ops->pre_init();
         }
     }
@@ -410,4 +417,67 @@ AM_RESULT AM_CA_DestroySecmem(SecMemHandle handle)
 
     return AM_ERROR_NOT_LOAD;
 
+}
+/**\brief Register event callback
+ * \param handle event_fn
+ * \param[in] session The opened session
+ * \param[in] event_fn The event callback function
+ * \retval AM_SUCCESS On success
+ * \return Error code
+ */
+AM_RESULT AM_CA_RegisterEventCallback(CasSession session, CAS_EventFunction_t event_fn)
+{
+    if (cas_ops && cas_ops->register_event_cb) {
+        return cas_ops->register_event_cb(session, event_fn);
+    }
+
+    return AM_ERROR_NOT_LOAD;
+}
+
+/**\brief CAS Ioctl
+ * \param handle in_json out_json out_len
+ * \param[in] session The opened session
+ * \param[in] in_json The input cmd string
+ * \param[out] out_json The output string
+ * \param[out] out_len The output string length
+ * \retval AM_SUCCESS On success
+ * \return Error code
+ */
+AM_RESULT AM_CA_Ioctl(CasSession session, const char *in_json, char *out_json, uint32_t out_len)
+{
+    if (cas_ops && cas_ops->ioctl) {
+        return cas_ops->ioctl(session, in_json, out_json, out_len);
+    }
+
+    return AM_ERROR_NOT_LOAD;
+}
+
+/**\brief Wether the specified cas system need whole section data
+ * \retval AM_TRUE or AM_FALSE
+ * \return Error code
+ */
+uint8_t AM_CA_IsNeedWholeSection(void)
+{
+	if (cas_ops && cas_ops->isNeedWholeSection) {
+		return cas_ops->isNeedWholeSection();
+	}
+
+	return 0;
+}
+
+/**\brief Report Section
+ * \param[in] pAttr the attribute of section
+ * \param[in] pData The pointer of section data buffer
+ * \param[in] len The length of section data
+ * \retval AM_SUCCESS On success
+ * \return Error code
+ */
+AM_RESULT AM_CA_ReportSection(AM_CA_SecAttr_t *pAttr, uint8_t *pData, uint16_t len)
+{
+	CAS_ASSERT(pData);
+	if (cas_ops && cas_ops->report_section) {
+		return cas_ops->report_section(pAttr, pData, len);
+	}
+
+	return AM_ERROR_NOT_LOAD;
 }

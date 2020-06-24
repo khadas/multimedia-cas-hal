@@ -122,6 +122,20 @@ typedef struct AM_CA_CryptoPara_s {
     size_t      buf_len;                         /**< Output data size in bytes.*/
 }AM_CA_CryptoPara_t;
 
+/**\brief Section of the table for CAS*/
+typedef enum {
+	AM_CA_SECTION_PMT,
+	AM_CA_SECTION_CAT,
+	AM_CA_SECTION_NIT,
+}AM_CA_SECTION;
+
+/**\brief CAS section attribute*/
+typedef struct AM_CA_SecAttr_s {
+    uint8_t dmx_dev;
+    uint16_t service_id;
+    AM_CA_SECTION section_type;
+}AM_CA_SecAttr_t;
+
 /**\brief Error code of the CAS-Hal module*/
 typedef enum {
 	AM_ERROR_SUCCESS,        /**< No error.*/
@@ -137,6 +151,9 @@ typedef size_t SecMemHandle;
 typedef size_t CasHandle;
 /**CAS session handle.*/
 typedef size_t CasSession;
+
+/**CAS event callback.*/
+typedef AM_RESULT (*CAS_EventFunction_t)(CasSession session, char *json);
 
 /**\brief Wether the specified system id is supported
  * \param[in] CA_system_id The system id of the CA system
@@ -267,6 +284,42 @@ SecMemHandle AM_CA_CreateSecmem(CA_SERVICE_TYPE_t type, void **pSecbuf, uint32_t
  * \return Error code
  */
 AM_RESULT AM_CA_DestroySecmem(SecMemHandle handle);
+
+/**\brief Register event callback
+ * \param handle event_fn
+ * \param[in] session The opened session
+ * \param[in] event_fn The event callback function
+ * \retval AM_SUCCESS On success
+ * \return Error code
+ */
+AM_RESULT AM_CA_RegisterEventCallback(CasSession session, CAS_EventFunction_t event_fn);
+
+/**\brief CAS Ioctl
+ * \param handle in_json out_json out_len
+ * \param[in] session The opened session
+ * \param[in] in_json The input cmd string
+ * \param[out] out_json The output string
+ * \param[out] out_len The output string length
+ * \retval AM_SUCCESS On success
+ * \return Error code
+ */
+AM_RESULT AM_CA_Ioctl(CasSession session, const char *in_json, char *out_json, uint32_t out_len);
+
+/**\brief Wether the specified cas system need whole section data
+ * \retval AM_TRUE or AM_FALSE
+ * \return Error code
+ */
+uint8_t AM_CA_IsNeedWholeSection(void);
+
+/**\brief Report Section
+ * \param[in] pAttr The attribute of section
+ * \param[in] pData The pointer of section data buffer
+ * \param[in] len The length of section data
+ * \retval AM_SUCCESS On success
+ * \return Error code
+ */
+AM_RESULT AM_CA_ReportSection(AM_CA_SecAttr_t *pAttr, uint8_t *pData, uint16_t len);
+
 #ifdef __cplusplus
 }
 #endif

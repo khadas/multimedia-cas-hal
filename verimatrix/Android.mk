@@ -22,11 +22,13 @@ LOCAL_MULTILIB := 32
 LOCAL_ARM_MODE := arm
 LOCAL_SRC_FILES := \
     src/vmx_main.c \
+    src/vmx_interact.c \
     src/vmx_porting.c
 
 LOCAL_C_INCLUDES := \
 		$(LOCAL_PATH)/include \
 		$(LOCAL_PATH)/../libamcas/include \
+		$(LOCAL_PATH)/../libcJSON \
 		$(LOCAL_PATH)/../liblinuxdvb_port/include \
 
 LOCAL_SHARED_LIBRARIES += liblog \
@@ -37,6 +39,7 @@ LOCAL_SHARED_LIBRARIES += liblog \
 
 LOCAL_STATIC_LIBRARIES += libvmx_ree_dual_aml \
   liblinuxdvb_port \
+  libcJSON \
   libcaclientapi
 
 LOCAL_STRIP_MODULE := false

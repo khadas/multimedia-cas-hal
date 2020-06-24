@@ -678,21 +678,6 @@ int16_t  FS_StopDescrambling( uint8_t bServiceIdx )
     return 0;
 }
 
-// --- MMI---
-int16_t  MMI_SetDescrambling_State( uint16_t wIndex,
-                                    uint16_t *pawStreamPid,
-                                    enDescState_t *paenDescState,
-                                    uint8_t bServiceIdx )
-{
-    UNUSED(wIndex);
-    UNUSED(pawStreamPid);
-    UNUSED(paenDescState);
-    UNUSED(bServiceIdx);
-    CA_DEBUG( 1, "@@call %s, [%d]state=%d, wIndex=%d", 
-	__FUNCTION__, bServiceIdx, *paenDescState, wIndex );
-    return 0;
-}
-
 int16_t  MMI_SetSmartcard_State( enScState_t state )
 {
     CA_DEBUG( 0, "@@call %s state=%d @@", __FUNCTION__, state );
@@ -964,25 +949,6 @@ void_t *LIBC_malloc( int32_t sz )
     return malloc( sz );
 }
 
-void_t   ISC_OrderPin( uint8_t bPinIndex, uint32_t lPurse,
-                       uint32_t lCost, uint16_t wMult, uint16_t wDiv,
-                       uint8_t bLocation, uint8_t bSign0,
-                       uint8_t bSign1000, uint8_t bCount, uint8_t bLen,
-                       uint8_t *abText, uint32_t lEventId, uint8_t bServiceIdx )
-{
-    UNUSED(wMult);
-    UNUSED(wDiv);
-    UNUSED(bLocation);
-    UNUSED(bSign0);
-    UNUSED(bSign1000);
-    UNUSED(bCount);
-    UNUSED(bLen);
-    UNUSED(abText);
-    CA_DEBUG( 0, "call %s bPinIndex=%#x %#x %#x lEventId=%#x serviceIdx=%#x", __FUNCTION__, bPinIndex, lPurse, lCost, lEventId, bServiceIdx );
-    printf( "call %s bPinIndex=%#x %#x %#x lEventId=%#x serviceIdx=%#x\n", __FUNCTION__, bPinIndex, lPurse, lCost, lEventId, bServiceIdx );
-    return;
-}
-
 void_t DVR_OK( uint8_t bChannelId, uint8_t bMode )
 {
     CA_DEBUG( 1, "@@call %s channel=%#x mode=%d @@", __FUNCTION__, bChannelId, bMode );
@@ -992,12 +958,6 @@ void_t DVR_OK( uint8_t bChannelId, uint8_t bMode )
 void_t DVR_UsedKey( uint8_t bChannelId, uint8_t bMode )
 {
     CA_DEBUG( 1, "@@call %s channel=%#x mode=%d @@", __FUNCTION__, bChannelId, bMode );
-    return;
-}
-
-void_t   ISC_CheckPin( uint8_t bPinIndex, uint8_t bTextSelector, uint8_t bServiceIdx )
-{
-    CA_DEBUG( 0, "call %s %#x %#x %#x", __FUNCTION__, bPinIndex, bTextSelector, bServiceIdx );
     return;
 }
 

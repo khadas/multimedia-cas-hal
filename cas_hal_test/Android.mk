@@ -8,6 +8,7 @@ LOCAL_SRC_FILES:= \
 
 LOCAL_C_INCLUDES := \
         $(LOCAL_PATH)/../libamcas/include \
+        $(LOCAL_PATH)/../libcJSON \
         $(LOCAL_PATH)/../liblinuxdvb_port/include \
         vendor/amlogic/common/prebuilt/dvb/include/am_adp \
         vendor/amlogic/common/libdvr_release/include \
@@ -16,6 +17,7 @@ LOCAL_C_INCLUDES := \
 LOCAL_SHARED_LIBRARIES := liblog
 LOCAL_STATIC_LIBRARIES += \
     libutils \
+    libcJSON \
     libam_cas \
     liblinuxdvb_port \
     libcutils
