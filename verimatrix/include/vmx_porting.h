@@ -38,7 +38,6 @@ typedef struct ecm_filter_s {
 } ecm_filter_t;
 
 typedef struct emm_filter_s {
-    int 		i_dmx_dev;
     int                                 i_fid;
     pthread_mutex_t     lock;
     uint16_t                    i_emm_pid;

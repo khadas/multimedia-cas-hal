@@ -20,6 +20,7 @@
 #include "am_cas_internal.h"
 
 #define SMC_DEV_NO (0)
+#define DMX_DEV_NO (2)
 
 #define MAX_FILTER_NUM 			16
 #define MAX_ECM_BUF_SIZE		2048
@@ -33,7 +34,6 @@ static int am_emm_buf_init();
 static void ( *am_smc_notify )() = NULL ;
 static int16_t  AM_FlushECM_Buffer( uint8_t bFilterId );
 extern int get_dmx_dev(int svc_idx);
-extern int find_dmx_dev(int16_t emmpid);
 
 ecm_filter_t 		g_ecm_filter[MAX_FILTER_NUM];
 emm_filter_t 		g_emm_filter = {
@@ -94,7 +94,6 @@ int vmx_port_init()
     }
 
     am_emm_buf_init();
-    g_emm_filter.i_dmx_dev = -1;
     g_emm_filter.i_emm_pid = 0x0000;
     g_emm_filter.i_fid = -1;
     for ( i = 0; i < MAX_EMM_INDEX; i++ ) {
@@ -367,12 +366,11 @@ int16_t  FS_SetECMFilter( uint8_t bFilterId, enFilterMode_t mode, uint16_t wEcmP
         return k_BcError;
     }
     dmx_dev = get_dmx_dev(bFilterId);
-    if (dmx_dev == -1 && mode != k_DisableFilter) {
+    if (dmx_dev == -1) {
         dmx_dev = 0;
         CA_DEBUG( 1, "%s find demux device faild, default use dmx%d",
             __func__, dmx_dev);
     }
-
     pthread_mutex_lock( &g_ecm_filter[bFilterId].lock );
     struct dmx_sct_filter_params param;
     g_ecm_filter[bFilterId].i_index = bFilterId;
@@ -590,33 +588,25 @@ int16_t  FS_SetEMMFilter( uint8_t bFilterIndex, uint8_t bAddressLength,
 
 int16_t  FS_SetEMM_Pid( uint16_t wEmmPid )
 {
-    int dmx_dev;
-
     CA_DEBUG( 1, "%s, pid is %#x", __FUNCTION__, wEmmPid );
-    dmx_dev = find_dmx_dev(wEmmPid);
-    if ( wEmmPid == g_emm_filter.i_emm_pid && dmx_dev == g_emm_filter.i_dmx_dev) {
+    if ( wEmmPid == g_emm_filter.i_emm_pid ) {
         CA_DEBUG( 1, "%s, pid has already set", __FUNCTION__ );
         return k_BcSuccess;
     }
-
-    if (g_emm_filter.i_fid != -1) {
-	am_dmx_stop_filter( dmx_dev, g_emm_filter.i_fid );
-	am_dmx_free_filter( dmx_dev, g_emm_filter.i_fid );
-        CA_DEBUG( 1, "%s, stop ; fid/cur %d %d", __FUNCTION__, g_emm_filter.i_fid, g_emm_filter.i_emm_pid );
-    }
-
-    g_emm_filter.i_emm_pid = wEmmPid;
-    g_emm_filter.i_dmx_dev = dmx_dev;
-
+    struct dmx_sct_filter_params param;
     if ( wEmmPid == 0x1FFF ) {
-        CA_DEBUG( 1, "%s, invalid pid, return", __FUNCTION__ );
+        CA_DEBUG( 1, "%s, pid is invalid, stop ; fid/cur %d %d", __FUNCTION__, g_emm_filter.i_fid, g_emm_filter.i_emm_pid );
+        if (g_emm_filter.i_fid != -1) {
+            am_dmx_stop_filter( DMX_DEV_NO, g_emm_filter.i_fid );
+            am_dmx_free_filter( DMX_DEV_NO, g_emm_filter.i_fid );
+        }
+        g_emm_filter.i_emm_pid = wEmmPid;
         return k_BcSuccess;
     }
-
-    struct dmx_sct_filter_params param;
-    am_dmx_alloc_filter( dmx_dev, &g_emm_filter.i_fid );
-    am_dmx_set_callback( dmx_dev, g_emm_filter.i_fid, am_emm_callback, &g_emm_filter );
-    CA_DEBUG(1, "%s alloc emm filter fid=%d on dmx%d\n", __FUNCTION__, g_emm_filter.i_fid, dmx_dev);
+    g_emm_filter.i_emm_pid = wEmmPid;
+    am_dmx_alloc_filter( DMX_DEV_NO, &g_emm_filter.i_fid );
+    am_dmx_set_callback( DMX_DEV_NO, g_emm_filter.i_fid, am_emm_callback, &g_emm_filter );
+    CA_DEBUG(2, "%s alloc emm filter fid=%d\n", __FUNCTION__, g_emm_filter.i_fid);
     memset( &param, 0, sizeof( param ) );
     param.pid = wEmmPid;
     param.filter.filter[0] = 0x80;
@@ -624,9 +614,9 @@ int16_t  FS_SetEMM_Pid( uint16_t wEmmPid )
 
     //param.flags = DMX_CHECK_CRC;
 
-    am_dmx_set_sec_filter( dmx_dev, g_emm_filter.i_fid, &param );
-    am_dmx_set_buffer_size( dmx_dev, g_emm_filter.i_fid, 512 * 1024 );
-    am_dmx_start_filter( dmx_dev, g_emm_filter.i_fid );
+    am_dmx_set_sec_filter( DMX_DEV_NO, g_emm_filter.i_fid, &param );
+    am_dmx_set_buffer_size( DMX_DEV_NO, g_emm_filter.i_fid, 512 * 1024 );
+    am_dmx_start_filter( DMX_DEV_NO, g_emm_filter.i_fid );
     return k_BcSuccess;
 }
 

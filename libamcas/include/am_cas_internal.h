@@ -74,7 +74,7 @@ struct AM_CA_Impl_t
     int (*start_descrambling)(CasSession session, AM_CA_ServiceInfo_t *service_info);
     int (*update_descrambling_pid)(CasSession session, uint16_t oldStreamPid, uint16_t newStreamPid);
     int (*stop_descrambling)(CasSession session);
-    int (*set_emm_pid)(CasHandle handle, int dmx_dev, uint16_t emmPid);
+    int (*set_emm_pid)(CasHandle handle, uint16_t emmPid);
     int (*dvr_start)(CasSession session, AM_CA_ServiceInfo_t *service_info);
     int (*dvr_stop)(CasSession session);
     int (*dvr_encrypt)(CasSession session, AM_CA_CryptoPara_t *cryptoPara);
