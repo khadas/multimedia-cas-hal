@@ -10,6 +10,7 @@
 #define ITEM_TEXT_SELECTOR 	"textSelector"
 #define ITEM_SERVICE_INDEX 	"serviceIndex"
 
+#define ITEM_CHANGE_PIN		"changePin"
 #define ITEM_ORDER_PIN		"orderPin"
 #define ITEM_CHECK_PIN		"checkPin"
 #define ITEM_PURSE 		"purse"
@@ -29,6 +30,29 @@
 #define ITEM_TIME		"time"
 #define ITEM_PIN		"pin"
 #define ITEM_REASON		"reason"
+#define ITEM_ERROR_CODE 	"errcode"
+
+#define ITEM_OLD_PIN		"oldPin"
+#define ITEM_OLD_PIN_LEN	"oldPinLen"
+#define ITEM_NEW_PIN		"newPin"
+#define ITEM_NEW_PIN_LEN	"newPinLen"
+
+#define ITEM_GET_PURSE		"GetPurse"
+#define ITEM_NUMBER		"number"
+
+#define ITEM_OSD_ATTR		"OsdAttr"
+#define ITEM_OSD_CONTENT	"osdContent"
+#define ITEM_OSD_MODE		"osdMode"
+#define ITEM_OSD_X		"osdX"
+#define ITEM_OSD_Y		"osdY"
+#define ITEM_OSD_W		"osdW"
+#define ITEM_OSD_H		"osdH"
+#define ITEM_OSD_BG		"osdBackground"
+#define ITEM_OSD_ALPHA		"osdAlpha"
+#define ITEM_OSD_FG		"osdForeground"
+#define ITEM_OSD_DISPLAY	"OsdDisplay"
+#define ITEM_OSD_DISPLAY_MODE   "osdDisplayMode"
+#define ITEM_OSD_DISPLAY_DURATION "osdDisplayDuration"
 
 #define MAX_JSON_LEN (1024)
 

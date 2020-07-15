@@ -398,6 +398,11 @@ CAS_EventFunction_t get_service_event_cb(int idx)
     return NULL;
 }
 
+CAS_EventFunction_t get_global_event_cb(void)
+{
+    return g_event_cb;
+}
+
 int get_dmx_dev(int svc_idx)
 {
     VMX_PrivateInfo_t *vmx_pri_info = NULL;
