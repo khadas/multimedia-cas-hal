@@ -903,36 +903,6 @@ void_t SYS_GetBoxId( uint8_t *pabBoxId )
     return;
 }
 
-
-void_t   OSD_BuildWindow( uint8_t *pabMsg, int16_t wMode,
-                          int16_t wX, int16_t wY, int16_t wW, int16_t wH,
-                          int8_t bBackground, int8_t bAlpha, int8_t bForeground )
-{
-    UNUSED(wMode);
-    UNUSED(wX);
-    UNUSED(wY);
-    UNUSED(wW);
-    UNUSED(wH);
-    UNUSED(bBackground);
-    UNUSED(bAlpha);
-    UNUSED(bForeground);
-    if ( pabMsg != NULL ) {
-        CA_DEBUG( 0, "%s: %s", __FUNCTION__, pabMsg  );
-        printf( "OSD_BuildWindow: %s\n", pabMsg );
-    } else {
-        CA_DEBUG( 0, "%s: %s", __FUNCTION__, pabMsg  );
-    }
-    return;
-}
-
-uint16_t  OSD_DisplayWindow( uint8_t bDisplayMode, uint16_t wDuration )
-{
-    UNUSED(bDisplayMode);
-    UNUSED(wDuration);
-    CA_DEBUG( 1, "@@call %s @@", __FUNCTION__ );
-    return 1;
-}
-
 int16_t IO_Printf( const char *format, /* args*/ ... )
 {
     int ret;
