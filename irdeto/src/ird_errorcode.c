@@ -23,6 +23,13 @@ static char *errorCode[] = {
 	ERR_MSG_E030,
 	ERR_MSG_E031,
 	ERR_MSG_E032,
+	ERR_MSG_E103,
+	ERR_MSG_E104,
+	ERR_MSG_E128,
+	ERR_MSG_E129,
+	ERR_MSG_E130,
+	ERR_MSG_E131,
+	ERR_MSG_E132,
 	ERR_MSG_E600,
 };
 
@@ -36,6 +43,13 @@ static char *screenText[] = {
 	"E030-0  P-Key mismatch.",
 	"E031-0  G-Key mismatch.",
 	"E032-0  TG mismatch.",
+	"E103-0  No valid ECM found or mismatched pipe selection.",
+	"E104-0  Invalid EMM received.",
+	"E128-0  Not entitled to perform PVR operation.",
+	"E129-0  The PVR content is expired.",
+	"E130-0  PVR Record is not allowed.",
+	"E131-0  No PVR Master Session Key to perform PVR operation.",
+	"E132-0  No PVR CPSK Key to perform PVR operation.",
 	"E600-0  Initialization has not been performed yet.",
 };
 

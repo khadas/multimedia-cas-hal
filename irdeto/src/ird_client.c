@@ -16,6 +16,9 @@
 #include <sys/un.h>
 
 #include "cJSON.h"
+/****zyl***/
+#include <list.h>
+/****zyl***/
 
 #include "UniversalClient_API.h"
 #include "UniversalClient_Common_SPI.h"
@@ -40,24 +43,31 @@ typedef void (*app_callback_fun)(char *json);
 #define MYEMMMESSAGEPROCDATA (void *)0x00020001
 #define MYECMSERVICECONTEXT  (void *)0x00010002
 #define MYECMMESSAGEPROCDATA (void *)0x00020002
+#define MYPVRSERVICECONTEXT  (void *)0x00010003
+#define MYPVRMESSAGEPROCDATA (void *)0x00020003
+#define PVR_PLAYBACK_SERVICE_CONTEXT    (void*)(0x00010004)
+#define PVR_PLAYBACK_SERVICE_PROC_DATA    (void*)(0x00020004)
+
+
+#define MAX_SERVICE_HANDLE_NUM (8)
 
 #define MAX_JSON_LENGTH (1024)
 
 #define CAS_SYSTEM "Irdeto"
 
-#define MULTIPLE_PLAY_NUM (1)
-
 typedef struct service_handle
 {
-    int active;
-	IRD_SERVICE_TYPE type;
-	uc_service_handle serviceHandle;
+    int	active;
+    int	dmx_dev;
+	IRD_SERVICE_TYPE	type;
+	uc_service_handle	serviceHandle;
+    void	*pServiceContext;
+    void	*pMessageProcData;
 } service_handle_st;
 
 static pthread_mutex_t _monitor_lock = PTHREAD_MUTEX_INITIALIZER;
 
-static service_handle_st g_EmmServiceHandle;
-static service_handle_st g_EcmServiceHandle[MULTIPLE_PLAY_NUM];
+static service_handle_st g_ServiceHandle[MAX_SERVICE_HANDLE_NUM];
 
 static char SecureCoreStatus[MAX_SECURECORE_STATUS_SIZE] = {0};
 static char SecureCoreDownload[MAX_SECURECORE_STATUS_SIZE] = {0};
@@ -70,55 +80,6 @@ static int b_caclient_init_finished = 0;
 
 static service_monitor_st *p_monitor_head = AML_NULL;
 
-
-#if 1
-void _test_thread()
-{
-	service_monitor_list_st stMonitorList;
-	int index = 0;
-
-	AM_APP_ConfigServiceMonitor(g_EcmServiceHandle[0].serviceHandle, 1);
-
-	sleep(2);
-
-	while (1)
-	{
-		AM_APP_GetServiceMonitorList(&stMonitorList);
-
-		CA_DEBUG(0, "[%s]: get new monitor count: %d\n", __FUNCTION__, stMonitorList.monitorCount);
-		for (index = 0; index < stMonitorList.monitorCount; index++)
-		{
-			CA_DEBUG(0, "[%s]: new monitor string: \"%s\"\n", __FUNCTION__, stMonitorList.monitorStr[index]);
-
-#if 0
-			FILE *fpt;
-
-			fpt = fopen("/data/vendor/irdeto/monitor.txt","a");
-			fprintf(fpt, "%s\n", stMonitorList.monitorStr[index]);
-			fclose(fpt);
-#endif
-		}
-
-		CA_DEBUG(0, "[%s]: print end\n", __FUNCTION__);
-
-		AM_APP_FreeServiceMonitorList(stMonitorList);
-
-		sleep(5);
-	}
-}
-
-void _satrt_test_thread()
-{
-	DKI_tid_t pthread_id;
-
-	if (pthread_create(&pthread_id, NULL,
-				  (void *(* _Nonnull)(void *))_test_thread, 0) != 0)
-	{
-		CA_DEBUG(0, "[%s]: pthread_create error\n", __FUNCTION__);
-		return;
-	}
-}
-#endif
 
 static void _free_memory_list(int num, char **memoryList)
 {
@@ -241,6 +202,23 @@ static void _struct_to_json(App_Msg_Type msg_type, void *p_data_structure, char 
 			cJSON_Delete(root);
 			break;
 		}
+
+		case APP_PVR_MSG:
+		{
+			errorcode_text_st *p_errorcode_text = (errorcode_text_st *)p_data_structure;
+			cJSON *root = cJSON_CreateObject();
+
+			cJSON_AddItemToObject(root, "cas_system", cJSON_CreateString(CAS_SYSTEM));
+			cJSON_AddItemToObject(root, "msg_type", cJSON_CreateNumber(msg_type));
+			cJSON_AddItemToObject(root, "index", cJSON_CreateNumber(p_errorcode_text->index));
+			cJSON_AddItemToObject(root, "content", cJSON_CreateString(p_errorcode_text->screen_text));
+
+			p_json = cJSON_Print(root);
+			memcpy(p_out_json, p_json, strlen(p_json));
+
+			cJSON_Delete(root);
+			break;
+		}
 	}
 
 #if 0
@@ -306,7 +284,6 @@ static void _notify_msg_to_app(char *p_json)
 	app_callback(tmep_buffer);
 }
 
-
 static void _append_monitor_to_list(char *p_monitor_in)
 {
 	service_monitor_st *p_new_monitor = AML_NULL;
@@ -314,15 +291,13 @@ static void _append_monitor_to_list(char *p_monitor_in)
 
 	CA_DEBUG(0, "[%s] step in, append new monitor to list.\n", __FUNCTION__);
 
-
 	pthread_mutex_lock(&_monitor_lock);
 
 	p_new_monitor = malloc(sizeof(service_monitor_st));
 	if (p_new_monitor == AML_NULL)
 	{
 		CA_DEBUG(0, "[%s] p_new_monitor malloc memory failed\n", __FUNCTION__);
-		pthread_mutex_unlock(&_monitor_lock);
-		return;
+		goto exit;
 	}
 
 	memset(p_new_monitor, 0x00, sizeof(service_monitor_st));
@@ -333,8 +308,7 @@ static void _append_monitor_to_list(char *p_monitor_in)
 	{
 		CA_DEBUG(0, "[%s] p_new_monitor->monitorStr malloc memory failed\n", __FUNCTION__);
 		free(p_new_monitor);
-		pthread_mutex_unlock(&_monitor_lock);
-		return;
+		goto exit;
 	}
 
 	CA_DEBUG(0, "[%s] p_new_monitor: %x, p_new_monitor->monitorStr: %x\n", __FUNCTION__, p_new_monitor, p_new_monitor->monitorStr);
@@ -358,9 +332,29 @@ static void _append_monitor_to_list(char *p_monitor_in)
 		p_current_monitor->next = p_new_monitor;
 	}
 
+exit:
 	pthread_mutex_unlock(&_monitor_lock);
 
 	return;
+}
+
+static int _get_monitor_list_num()
+{
+	service_monitor_st *p_current_monitor = AML_NULL;
+	int number = 0;
+
+	CA_DEBUG(0, "[%s] step in.\n", __FUNCTION__);
+
+	p_current_monitor = p_monitor_head;
+	while (p_current_monitor != AML_NULL)
+	{
+		p_current_monitor = p_current_monitor->next;
+		number++;
+	}
+
+	CA_DEBUG(0, "[%s] step out. number = %d\n", __FUNCTION__, number);
+
+	return number;
 }
 
 static void _clear_monitor_list()
@@ -440,8 +434,8 @@ static void MyGlobalMessageProc(uc_global_message_type message,  void* lpVoid)
 						offset += 1;
 
 						/**
-							0x00 Text – Mailbox
-							0x01 Text – Announcement  */
+							0x00 Text - Mailbox
+							0x01 Text - Announcement  */
 						if ((text_message_type == 0x00) || (text_message_type == 0x01))
 						{
 							message_class = p_pay_load[offset] >> 5;
@@ -694,6 +688,20 @@ static void MyGlobalMessageProc(uc_global_message_type message,  void* lpVoid)
             break;
         }
 
+        case UC_GLOBAL_NOTIFY_ENTITLEMENT_CHANGE:
+        {
+            CA_DEBUG(0, "notify UC_GLOBAL_NOTIFY_ENTITLEMENT_CHANGE\n");
+            break;
+        }
+
+        case UC_GLOBAL_NOTIFY_ENTITLED_STATUS_CHANGE:
+        {
+            uc_product_status *product_status = (uc_product_status *)lpVoid;
+
+            CA_DEBUG(0, "notify UC_GLOBAL_NOTIFY_ENTITLED_STATUS_CHANGE, entitled: %d\n", product_status->entitled);
+            break;
+        }
+
 		case UC_GLOBAL_NOTIFY_FLEXIFLASH_MESSAGE:
         {
 			uc_flexiflash_msg *flexiflash_msg = (uc_flexiflash_msg *)lpVoid;
@@ -750,7 +758,7 @@ static void MyGlobalMessageProc(uc_global_message_type message,  void* lpVoid)
 
 void MyServiceMessageProc(void *pMessageProcData, uc_service_message_type message, void *pVoid)
 {
-	CA_DEBUG(0, "Service message process type: 0x%x\n", message);
+	CA_DEBUG(0, "Service message process data: %08x, type: 0x%x\n", pMessageProcData, message);
 
     switch (message)
     {
@@ -760,15 +768,14 @@ void MyServiceMessageProc(void *pMessageProcData, uc_service_message_type messag
             uc_ecm_status_st *pEcmStatus = (uc_ecm_status_st *)pVoid;
 
             // check to make sure this is the right service.
-            if (pMessageProcData == MYECMMESSAGEPROCDATA)
+            if ((pMessageProcData == MYECMMESSAGEPROCDATA) || (pMessageProcData == MYPVRMESSAGEPROCDATA))
             {
                 // technically, different transport protocols can have different information.
                 // For now, only DVB is supported.
                 if (pEcmStatus->caStream.protocolType == UC_STREAM_DVB)
                 {
-                    CA_DEBUG(0, "Received ECM status '%s' for PID 0x%08X\n",
-                        pEcmStatus->statusMessage,
-                        pEcmStatus->caStream.pid);
+                    CA_DEBUG(0, "[0x%08X] Received ECM status '%s' for PID 0x%08X\n",
+                        pMessageProcData, pEcmStatus->statusMessage, pEcmStatus->caStream.pid);
                 }
             }
             else
@@ -810,11 +817,28 @@ void MyServiceMessageProc(void *pMessageProcData, uc_service_message_type messag
 			int error_index;
 			char json_buffer[1024] = {0};
 
-			CA_DEBUG(0, "Received Service status '%s'\n", pServiceStatus->statusMessage);
+			CA_DEBUG(0, "[0x%08X] Received Service status '%s'\n", pMessageProcData, pServiceStatus->statusMessage);
+
+			CA_DEBUG(0, "nonPVREnableFlag: %d, isSecureMediaPipelineUsed: %d, errorCodeForSMP: [%02x][%02x]\n", \
+									pServiceStatus->nonPVREnableFlag, pServiceStatus->isSecureMediaPipelineUsed, \
+									pServiceStatus->errorCodeForSMP[0], pServiceStatus->errorCodeForSMP[1]);
+
+            if (pMessageProcData == MYPVRMESSAGEPROCDATA)
+            {
+				CA_DEBUG(0, "Do not dispose PVR/timeshift message yet\n");
+				break;
+            }
+
+			if (strncmp(pServiceStatus->statusMessage, ERR_MSG_D100, strlen(ERR_MSG_D100)) == 0)
+			{
+				CA_DEBUG(0, "Ignore D100 status message\n");
+				break;
+			}
 
 			memset(&s_errorcode_text, 0x00, sizeof(errorcode_text_st));
 			memset(json_buffer, 0x00, sizeof(json_buffer));
 			screen_text = (char *)ird_get_screen_text(pServiceStatus->statusMessage, &error_index);
+
 			if (screen_text != AML_NULL)
 			{
 				CA_DEBUG(0, "error_index: %d,  msg: :\'%s\'\n", error_index, screen_text);
@@ -834,8 +858,13 @@ void MyServiceMessageProc(void *pMessageProcData, uc_service_message_type messag
 		{
 			uc_service_monitor_status_st *pServiceMonitor = (uc_service_monitor_status_st *)pVoid;
 
-			CA_DEBUG(0, "Ecm monitor: '%s'\n", pServiceMonitor->pMessage);
-			_append_monitor_to_list(pServiceMonitor->pMessage);
+			CA_DEBUG(0, "serviceHandle: 0x%08x, Ecm monitor: '%s'\n", pServiceMonitor->serviceHandle, pServiceMonitor->pMessage);
+			CA_DEBUG(0, "message length: %d\n", strlen(pServiceMonitor->pMessage));
+
+			if (strlen(pServiceMonitor->pMessage) > 0)
+			{
+				_append_monitor_to_list(pServiceMonitor->pMessage);
+			}
 
 			break;
 		}
@@ -843,11 +872,69 @@ void MyServiceMessageProc(void *pMessageProcData, uc_service_message_type messag
 		case UC_SERVICE_EMM_MONITOR_STATUS:
 		{
 			uc_service_monitor_status_st *pServiceMonitor = (uc_service_monitor_status_st *)pVoid;
+			CA_DEBUG(0, "message length: %d\n", strlen(pServiceMonitor->pMessage));
 
-			CA_DEBUG(0, "Emm monitor: '%s'\n", pServiceMonitor->pMessage);
-			_append_monitor_to_list(pServiceMonitor->pMessage);
+			CA_DEBUG(0, "serviceHandle: 0x%08x, Emm monitor: '%s'\n", pServiceMonitor->serviceHandle, pServiceMonitor->pMessage);
+			if (strlen(pServiceMonitor->pMessage) > 0)
+			{
+				_append_monitor_to_list(pServiceMonitor->pMessage);
+			}
 
 			break;
+		}
+
+        case UC_SERVICE_PVR_RECORD_STATUS_REPLY:
+        case UC_SERVICE_PVR_PLAYBACK_STATUS_REPLY:
+        {
+			errorcode_text_st s_errorcode_text;
+			char *screen_text = AML_NULL;
+			int error_index;
+			char json_buffer[1024] = {0};
+
+             if (pVoid)
+             {
+                 uc_pvr_service_status_st *vPVRStatus = (uc_pvr_service_status_st *)pVoid;
+				 CA_DEBUG(0, "PVR record or playback on service %d status is: %s\n", vPVRStatus->serviceHandle, (char*)vPVRStatus->pMessage);
+
+				memset(&s_errorcode_text, 0x00, sizeof(errorcode_text_st));
+				memset(json_buffer, 0x00, sizeof(json_buffer));
+				screen_text = (char *)ird_get_screen_text(vPVRStatus->pMessage, &error_index);
+				if (screen_text != AML_NULL)
+				{
+					CA_DEBUG(0, "error_index: %d,  msg: :\'%s\'\n", error_index, screen_text);
+					CA_DEBUG(0, "length: %d\n", strlen(screen_text));
+
+					s_errorcode_text.index = error_index;
+					memcpy(s_errorcode_text.screen_text, screen_text, strlen(screen_text));
+
+					_struct_to_json(APP_PVR_MSG, (void *)&s_errorcode_text, json_buffer);
+					_notify_msg_to_app(json_buffer);
+				}
+			 }
+            break;
+        }
+
+		case UC_SERVICE_PVR_SESSION_METADATA_REPLY:
+		{
+				if (pVoid)
+	            {
+	                uc_pvr_service_status_st *pPVRStatus = (uc_pvr_service_status_st *)pVoid;
+	                uc_buffer_st *pMetaData = (uc_buffer_st*)pPVRStatus->pMessage;
+
+	                /*Save The PVR Session Metadata */
+					CA_DEBUG(0, "serviceHandle: 0x%x, MetaData len: %d\n", pPVRStatus->serviceHandle, pMetaData->length);
+					ird_metadata_SaveStoreInfoToFile(pPVRStatus->serviceHandle, pMetaData->length, pMetaData->bytes);
+	            }
+				break;
+		}
+
+		case UC_SERVICE_SMP_PIPE_SIGNALING:
+		{
+			uc_service_smp_signaling_st *pSmpSignaling = (uc_service_smp_signaling_st *)pVoid;
+
+			CA_DEBUG(0, "SMP pipe signaling, serviceHandle: %x, streamHandle: %x, securePipeIndicator: %x\n", \
+							pSmpSignaling->serviceHandle, pSmpSignaling->streamHandle, pSmpSignaling->securePipeIndicator);
+            break;
 		}
 
         default:
@@ -882,164 +969,201 @@ void ird_client_start(void)
 	return;
 }
 
-void ird_open_service(IRD_SERVICE_TYPE type)
+int ird_open_service(int dmx_dev, IRD_SERVICE_TYPE type)
 {
     uc_result result = UC_ERROR_SUCCESS;
 	uc_service_handle serviceHandle;
+	void *pServiceContext = AML_NULL;
+	void *pMessageProcData = AML_NULL;
 	int index = 0;
 
-	switch (type)
+	for (index = 0; index < MAX_SERVICE_HANDLE_NUM; index++)
 	{
-		case IRD_PLAY_EMM:
+		if (g_ServiceHandle[index].active == 0)
 		{
-	        result = UniversalClient_OpenService(MYEMMSERVICECONTEXT, MyServiceMessageProc, \
-									            MYEMMMESSAGEPROCDATA, &serviceHandle);
-			if (result == UC_ERROR_SUCCESS)
-			{
-				g_EmmServiceHandle.serviceHandle = serviceHandle;
-				g_EmmServiceHandle.type = IRD_PLAY_EMM;
-				g_EmmServiceHandle.active = 1;
-
-				CA_DEBUG(0, "open emm service success, serviceHandle: %x\n", serviceHandle);
-			}
-			else
-			{
-				CA_DEBUG(0, "open emm service failed, result: %d\n", result);
-			}
-
-			break;
-		}
-
-		case IRD_PLAY_LIVE:
-		{
-			for (index = 0; index < MULTIPLE_PLAY_NUM; index++)
-			{
-				if (g_EcmServiceHandle[index].active == 0)
-				{
-					break;
-				}
-
-				if (g_EcmServiceHandle[index].type == IRD_PLAY_LIVE)
-				{
-					CA_DEBUG(0, "live service has been open, do nothing\n");
-					return;
-				}
-			}
-
-			if (index == MULTIPLE_PLAY_NUM)
-			{
-				CA_DEBUG(0, "no enough ecm service handle\n");
-				return;
-			}
-
-			result = UniversalClient_OpenService(MYECMSERVICECONTEXT, MyServiceMessageProc, \
-												MYECMMESSAGEPROCDATA, &serviceHandle);
-			if (result == UC_ERROR_SUCCESS)
-			{
-				g_EcmServiceHandle[index].serviceHandle = serviceHandle;
-				g_EcmServiceHandle[index].type = IRD_PLAY_LIVE;
-				g_EcmServiceHandle[index].active = 1;
-
-				CA_DEBUG(0, "open ecm[%d] service success, serviceHandle: %x\n", index, serviceHandle);
-			}
-			else
-			{
-				CA_DEBUG(0, "open ecm[%d] service failed, result: %d\n", index, result);
-			}
-
 			break;
 		}
 	}
-	return;
-}
 
-void ird_close_service(IRD_SERVICE_TYPE type)
-{
-    uc_result result = UC_ERROR_SUCCESS;
-	uc_service_handle serviceHandle;
-	int index = 0;
+	if (index == MAX_SERVICE_HANDLE_NUM)
+	{
+		CA_DEBUG(0, "[%s] can not opne service, no more unused service handle.\n", __FUNCTION__);
+		return -1;
+	}
 
 	switch (type)
 	{
 		case IRD_PLAY_EMM:
 		{
-			if (g_EmmServiceHandle.active == 1)
-			{
-				serviceHandle = g_EmmServiceHandle.serviceHandle;
-
-				CA_DEBUG(0, "close emm service serviceHandle: %x\n", serviceHandle);
-				result = UniversalClient_CloseService(&serviceHandle);
-				if (result == UC_ERROR_SUCCESS)
-				{
-					CA_DEBUG(0, "close emm service success\n");
-					g_EmmServiceHandle.active = 0;
-				}
-				else
-				{
-					CA_DEBUG(0, "close emm service fail, relsut: %x\n", result);
-				}
-			}
+			pServiceContext = MYEMMSERVICECONTEXT;
+			pMessageProcData = MYEMMMESSAGEPROCDATA;
 			break;
 		}
 
 		case IRD_PLAY_LIVE:
 		{
-			for (index = 0; index < MULTIPLE_PLAY_NUM; index++)
-			{
-				if ((g_EcmServiceHandle[index].active == 1) && (g_EcmServiceHandle[index].type == IRD_PLAY_LIVE))
-				{
-					break;
-				}
-			}
-
-			if (index == MULTIPLE_PLAY_NUM)
-			{
-				CA_DEBUG(0, "not found targt service handle\n");
-				return;
-			}
-
-			serviceHandle = g_EcmServiceHandle[index].serviceHandle;
-			CA_DEBUG(0, "close ecm service serviceHandle: %x\n", serviceHandle);
-			result = UniversalClient_CloseService(&serviceHandle);
-			if (result == UC_ERROR_SUCCESS)
-			{
-				CA_DEBUG(0, "close ecm service success\n");
-				g_EcmServiceHandle[index].active = 0;
-			}
-			else
-			{
-				CA_DEBUG(0, "close ecm service fail, relsut: %x\n", result);
-			}
+			pServiceContext = MYECMSERVICECONTEXT;
+			pMessageProcData = MYECMMESSAGEPROCDATA;
 			break;
+		}
+
+		case IRD_PLAY_RECORD:
+		{
+			pServiceContext = MYPVRSERVICECONTEXT;
+			pMessageProcData = MYPVRMESSAGEPROCDATA;
+			break;
+		}
+
+		case IRD_PLAY_PLAYBACK:
+		{
+			pServiceContext = PVR_PLAYBACK_SERVICE_CONTEXT;
+			pMessageProcData = PVR_PLAYBACK_SERVICE_PROC_DATA;
+			break;
+		}
+	}
+
+	result = UniversalClient_OpenService(pServiceContext, MyServiceMessageProc, \
+										pMessageProcData, &serviceHandle);
+	if (result == UC_ERROR_SUCCESS)
+	{
+		g_ServiceHandle[index].pServiceContext = pServiceContext;
+		g_ServiceHandle[index].pMessageProcData = pMessageProcData;
+		g_ServiceHandle[index].serviceHandle = serviceHandle;
+		g_ServiceHandle[index].type = type;
+		g_ServiceHandle[index].dmx_dev = dmx_dev;
+		g_ServiceHandle[index].active = 1;
+
+		CA_DEBUG(0, "[%s] open service(%d) success, type: %d, serviceHandle: 0x%08x\n", __FUNCTION__, index, type, serviceHandle);
+		return index;
+	}
+	else
+	{
+		CA_DEBUG(0, "[%s] open service(%d) failed, type: %d, result: %d\n", __FUNCTION__, index, type, result);
+		return -1;
+	}
+}
+
+void ird_close_service(int index)
+{
+    uc_result result = UC_ERROR_SUCCESS;
+	uc_service_handle serviceHandle;
+
+	if ((index < -1) || (index >= MAX_SERVICE_HANDLE_NUM))
+	{
+		CA_DEBUG(0, "[%s] Invaild parameter index: %d\n", __FUNCTION__, index);
+		return;
+	}
+
+	if (g_ServiceHandle[index].active == 1)
+	{
+		/****zyl***/
+		{
+			Ird_status_t	IrdRet = IRD_NO_ERROR;
+
+			IrdRet = ird_metadata_ResetPVRStoreInfo(g_ServiceHandle[index].serviceHandle);
+			if (IrdRet != IRD_NO_ERROR)
+			{
+				CA_DEBUG(0, "call ird_metadata_ResetPVRStoreInfo is error!");
+			}
+		}
+		/****zyl***/
+
+		result = UniversalClient_CloseService(&g_ServiceHandle[index].serviceHandle);
+		if (result == UC_ERROR_SUCCESS)
+		{
+			CA_DEBUG(0, "[%s] close service(%d) success, type: %d, serviceHandle: %x\n", __FUNCTION__, index, \
+										g_ServiceHandle[index].type, g_ServiceHandle[index].serviceHandle);
+
+			g_ServiceHandle[index].pServiceContext = AML_NULL;
+			g_ServiceHandle[index].pMessageProcData = AML_NULL;
+			g_ServiceHandle[index].serviceHandle = AML_NULL;
+			g_ServiceHandle[index].type = IRD_PLAY_NONE;
+			g_ServiceHandle[index].dmx_dev = -1;
+			g_ServiceHandle[index].active = 0;
+		}
+		else
+		{
+			CA_DEBUG(0, "[%s] close service(%d) failed, type: %d, result: %d\n", __FUNCTION__, index, \
+								g_ServiceHandle[index].type, result);
 		}
 	}
 
 	return;
 }
 
-int ird_process_pmt(uint8_t *pdata, uint16_t len)
+int ird_get_dmx_dev(void* pServiceContext)
+{
+    int index = 0;
+	int dmx_dev = -1;
+
+	for (index = 0; index < MAX_SERVICE_HANDLE_NUM; index++)
+	{
+		if ((g_ServiceHandle[index].active == 1) && (g_ServiceHandle[index].pServiceContext == pServiceContext))
+		{
+			dmx_dev = g_ServiceHandle[index].dmx_dev;
+			break;
+		}
+	}
+
+	return dmx_dev;
+}
+
+int ird_process_pmt(int handleId, uint8_t *pdata, uint16_t len)
 {
     uc_result result = UC_ERROR_SUCCESS;
 	uc_buffer_st bytes = {0};
 
 	bytes.bytes = pdata;
 	bytes.length = len;
-	result = UniversalClient_DVB_NotifyPMT(g_EcmServiceHandle[0].serviceHandle, &bytes);
+	result = UniversalClient_DVB_NotifyPMT(g_ServiceHandle[handleId].serviceHandle, &bytes);
 
-	CA_DEBUG(0, "notify PMT result = %x\n", result);
+	CA_DEBUG(0, "[%s] notify PMT result = %x\n", __FUNCTION__, result);
     return 0;
 }
 
-int ird_process_cat(uint8_t *pdata, uint16_t len)
+int ird_process_cat(int handleId, uint8_t *pdata, uint16_t len)
 {
     uc_result result = UC_ERROR_SUCCESS;
 	uc_buffer_st bytes = {0};
 
 	bytes.bytes = pdata;
 	bytes.length = len;
-    result = UniversalClient_DVB_NotifyCAT(g_EmmServiceHandle.serviceHandle, &bytes);
+    result = UniversalClient_DVB_NotifyCAT(g_ServiceHandle[handleId].serviceHandle, &bytes);
 
-	CA_DEBUG(0, "notify CAT result = %x\n", result);
+	CA_DEBUG(0, "[%s] notify CAT result = %x\n", __FUNCTION__, result);
+    return 0;
+}
+
+int ird_start_record(int handleId)
+{
+    uc_result result = UC_ERROR_SUCCESS;
+
+	result = PVRRecord(g_ServiceHandle[handleId].serviceHandle);
+
+	CA_DEBUG(0, "[%s] secure PVR start record serviceHandle = 0x%08x, result = %x\n", __FUNCTION__, g_ServiceHandle[handleId].serviceHandle, result);
+    return 0;
+}
+
+int ird_stop_record(int handleId)
+{
+    uc_result result = UC_ERROR_SUCCESS;
+
+	result = PVRStopRecord(g_ServiceHandle[handleId].serviceHandle);
+
+	CA_DEBUG(0, "[%s] secure PVR stop record serviceHandle = %08x, result = %x\n", __FUNCTION__, g_ServiceHandle[handleId].serviceHandle, result);
+    return 0;
+}
+
+int ird_submit_metadata(int handleId, uint8_t *pdata, uint16_t len)
+{
+    uc_result result = UC_ERROR_SUCCESS;
+	uc_buffer_st metaData = {0};
+
+	metaData.bytes = pdata;
+	metaData.length = len;
+    result = UniversalClient_SubmitPVRSessionMetadata(g_ServiceHandle[handleId].serviceHandle, &metaData);
+
+	CA_DEBUG(0, "[%s] submit PVR session metadata result = %x\n", __FUNCTION__, result);
     return 0;
 }
 
@@ -1072,9 +1196,25 @@ void ird_clear_screen_msg()
 	_notify_msg_to_app(json_buffer);
 }
 
+/****zyl***/
+Ird_status_t ird_metadata_GetServiceHandle(unsigned int index, uc_service_handle *phServiceHandle)
+{
+	if ((index >= MAX_SERVICE_HANDLE_NUM) || (phServiceHandle == AML_NULL))
+	{
+		CA_DEBUG(0, "[%s]Invaild parameter index: %d, phServiceHandle = 0x%p\n", __FUNCTION__, index, phServiceHandle);
+		return IRD_INVALID_PARAMETER;
+	}
+
+	*phServiceHandle = g_ServiceHandle[index].serviceHandle;
+	CA_DEBUG(0, "[%s]success, serviceHandle = 0x%x!\n", __FUNCTION__, *phServiceHandle);
+	return IRD_NO_ERROR;
+}
+/****zyl***/
+
 Ird_status_t AM_APP_GetAllService(service_type_st *stAllService)
 {
 	int index = 0;
+	int srv_id= 0;
 
 	if (b_caclient_init_finished == 0)
 	{
@@ -1085,19 +1225,33 @@ Ird_status_t AM_APP_GetAllService(service_type_st *stAllService)
 	CA_DEBUG(0, "[%s] get in.\n", __FUNCTION__);
 	if (stAllService == AML_NULL)
 	{
-		CA_DEBUG(0, "[%s] invalid parameter, stAllService: %x\n", __FUNCTION__, stAllService);
+		CA_DEBUG(0, "[%s] invalid parameter, stAllService: 0x%p\n", __FUNCTION__, stAllService);
 		return IRD_INVALID_PARAMETER;
 	}
 
-	stAllService->serviceHandle[index] = g_EmmServiceHandle.serviceHandle;
-	sprintf(stAllService->serviceName[index], "Broadcast EMM Service");
-	index++;
-
-	if (g_EcmServiceHandle[0].active == 1)
+	for (srv_id = 0; srv_id < MAX_SERVICE_HANDLE_NUM; srv_id++)
 	{
-		stAllService->serviceHandle[index] = g_EcmServiceHandle[0].serviceHandle;
-		sprintf(stAllService->serviceName[index], "Descramble Service");
-		index++;
+		if (g_ServiceHandle[srv_id].active == 1)
+		{
+			stAllService->serviceHandle[index] = g_ServiceHandle[srv_id].serviceHandle;
+
+			switch (g_ServiceHandle[srv_id].type)
+			{
+				case IRD_PLAY_EMM:
+					sprintf(stAllService->serviceName[index], "Broadcast EMM Service");
+					break;
+
+				case IRD_PLAY_LIVE:
+					sprintf(stAllService->serviceName[index], "Descramble Service");
+					break;
+
+				case IRD_PLAY_RECORD:
+					sprintf(stAllService->serviceName[index], "PVR Record Service");
+					break;
+			}
+
+			index++;
+		}
 	}
 
 	stAllService->count = index;
@@ -1112,6 +1266,7 @@ Ird_status_t AM_APP_GetServiceStatus(uint32_t serviceHandle,  service_status_st 
 	uc_uint32 nStreamCount;
 	uc_service_stream_status_st *pStreamStatusList;
 	uint32_t index = 0;
+	uint32_t idx = 0;
 
 	if (b_caclient_init_finished == 0)
 	{
@@ -1120,7 +1275,15 @@ Ird_status_t AM_APP_GetServiceStatus(uint32_t serviceHandle,  service_status_st 
 	}
 
 	CA_DEBUG(0, "[%s] get in. serviceHandle: %x\n", __FUNCTION__, serviceHandle);
-	if ((serviceHandle != g_EmmServiceHandle.serviceHandle) && (serviceHandle != g_EcmServiceHandle[0].serviceHandle))
+	for (idx = 0; idx < MAX_SERVICE_HANDLE_NUM; idx++)
+	{
+		if ((g_ServiceHandle[idx].active == 1) && (g_ServiceHandle[idx].serviceHandle == serviceHandle))
+		{
+			break;
+		}
+	}
+
+	if (idx == MAX_SERVICE_HANDLE_NUM)
 	{
 		CA_DEBUG(0, "[%s] invalid service handle: %x\n", __FUNCTION__, serviceHandle);
 		return IRD_INVALID_PARAMETER;
@@ -1140,52 +1303,59 @@ Ird_status_t AM_APP_GetServiceStatus(uint32_t serviceHandle,  service_status_st 
 		return IRD_FAILURE;
 	}
 
-	if (serviceHandle == g_EmmServiceHandle.serviceHandle)
+	switch (g_ServiceHandle[idx].type)
 	{
-		for (index = 0; index < nStreamCount; index++)
+		case IRD_PLAY_EMM:
 		{
-			pService->streamMsg[index] = (char*)malloc(MAX_SERVICE_STREAM_LEN);
-			if (pService->streamMsg[index] == AML_NULL)
+			for (index = 0; index < nStreamCount; index++)
 			{
-				CA_DEBUG(0, "stream message malloc memory failed\n");
-				_free_memory_list(nStreamCount, pService->streamMsg);
-				return IRD_FAILURE;
+				pService->streamMsg[index] = (char*)malloc(MAX_SERVICE_STREAM_LEN);
+				if (pService->streamMsg[index] == AML_NULL)
+				{
+					CA_DEBUG(0, "stream message malloc memory failed\n");
+					_free_memory_list(nStreamCount, pService->streamMsg);
+					return IRD_FAILURE;
+				}
+
+				snprintf(pService->streamMsg[index], MAX_SERVICE_STREAM_LEN, "EMM : 0x%04x, %s, 0x%04x", \
+									pStreamStatusList[index].caStream.pid, pStreamStatusList[index].streamStatusMessage, \
+									pStreamStatusList[index].caSystemID);
 			}
-
-			snprintf(pService->streamMsg[index], MAX_SERVICE_STREAM_LEN, "EMM : 0x%04x, %s, 0x%04x", \
-								pStreamStatusList[index].caStream.pid, pStreamStatusList[index].streamStatusMessage, \
-								pStreamStatusList[index].caSystemID);
 		}
-	}
-	else
-	{
-		char _temp_es_str[MAX_SERVICE_STREAM_LEN];
-		uint16_t offset = 0;
+		break;
 
-		memset(_temp_es_str, 0x00, sizeof(_temp_es_str));
-		sprintf(_temp_es_str, "%s", "ES :");
-		offset += 4;
-		for (index = 0; index < nStreamCount; index++)
+		case IRD_PLAY_LIVE:
+		case IRD_PLAY_RECORD:
 		{
-			pService->streamMsg[index] = (char*)malloc(MAX_SERVICE_STREAM_LEN);
-			if (pService->streamMsg[index] == AML_NULL)
-			{
-				CA_DEBUG(0, "stream message malloc memory failed\n");
-				_free_memory_list(nStreamCount, pService->streamMsg);
-				return IRD_FAILURE;
-			}
+			char _temp_es_str[MAX_SERVICE_STREAM_LEN];
+			uint16_t offset = 0;
 
-			for (int idx = 0; idx < pStreamStatusList[index].componentCount; idx++)
+			memset(_temp_es_str, 0x00, sizeof(_temp_es_str));
+			sprintf(_temp_es_str, "%s", "ES :");
+			offset += 4;
+			for (index = 0; index < nStreamCount; index++)
 			{
-				sprintf(_temp_es_str + offset, "0x%04x, ", pStreamStatusList[index].componentStreamArray[idx].pid);
-				offset += 8;
-			}
-			_temp_es_str[offset] = '\0';
+				pService->streamMsg[index] = (char*)malloc(MAX_SERVICE_STREAM_LEN);
+				if (pService->streamMsg[index] == AML_NULL)
+				{
+					CA_DEBUG(0, "stream message malloc memory failed\n");
+					_free_memory_list(nStreamCount, pService->streamMsg);
+					return IRD_FAILURE;
+				}
 
-			snprintf(pService->streamMsg[index], MAX_SERVICE_STREAM_LEN, "%sECM :0x%04x, %s, 0x%04x", \
-								_temp_es_str, pStreamStatusList[index].caStream.pid, pStreamStatusList[index].streamStatusMessage, \
-								pStreamStatusList[index].caSystemID);
+				for (int idx = 0; idx < pStreamStatusList[index].componentCount; idx++)
+				{
+					sprintf(_temp_es_str + offset, "0x%04x, ", pStreamStatusList[index].componentStreamArray[idx].pid);
+					offset += 8;
+				}
+				_temp_es_str[offset] = '\0';
+
+				snprintf(pService->streamMsg[index], MAX_SERVICE_STREAM_LEN, "%sECM :0x%04x, %s, 0x%04x", \
+									_temp_es_str, pStreamStatusList[index].caStream.pid, pStreamStatusList[index].streamStatusMessage, \
+									pStreamStatusList[index].caSystemID);
+			}
 		}
+		break;
 	}
 
 	UniversalClient_FreeStreamStatus(&pStreamStatusList);
@@ -1459,6 +1629,7 @@ Ird_status_t AM_APP_ConfigServiceMonitor(uint32_t serviceHandle, int bEnable)
 	uint8_t TLV_buf[4] = {0};
 	uint16_t Length = 0;
 	uint8_t index = 0;
+	uint32_t idx = 0;
 
 	if (b_caclient_init_finished == 0)
 	{
@@ -1467,7 +1638,16 @@ Ird_status_t AM_APP_ConfigServiceMonitor(uint32_t serviceHandle, int bEnable)
 	}
 
 	CA_DEBUG(0, "[%s] get in, serviceHandle: %x, bEnable: %d\n", __FUNCTION__, serviceHandle, bEnable);
-	if ((serviceHandle != g_EmmServiceHandle.serviceHandle) && (serviceHandle != g_EcmServiceHandle[0].serviceHandle))
+	CA_DEBUG(0, "[%s] get in. serviceHandle: %x\n", __FUNCTION__, serviceHandle);
+	for (idx = 0; idx < MAX_SERVICE_HANDLE_NUM; idx++)
+	{
+		if ((g_ServiceHandle[idx].active == 1) && (g_ServiceHandle[idx].serviceHandle == serviceHandle))
+		{
+			break;
+		}
+	}
+
+	if (idx == MAX_SERVICE_HANDLE_NUM)
 	{
 		CA_DEBUG(0, "[%s] invalid service handle: %x\n", __FUNCTION__, serviceHandle);
 		return IRD_INVALID_PARAMETER;
@@ -1497,7 +1677,9 @@ Ird_status_t AM_APP_ConfigServiceMonitor(uint32_t serviceHandle, int bEnable)
 Ird_status_t AM_APP_GetServiceMonitorList(service_monitor_list_st *pMonitorList)
 {
 	service_monitor_st *p_del_monitor = AML_NULL;
+	Ird_status_t status = IRD_NO_ERROR;
 	int count = 0;
+	int number = 0;
 	int index = 0;
 
 	if (b_caclient_init_finished == 0)
@@ -1508,48 +1690,60 @@ Ird_status_t AM_APP_GetServiceMonitorList(service_monitor_list_st *pMonitorList)
 
 	CA_DEBUG(0, "[%s] step in, get new monitor from list.\n", __FUNCTION__);
 
-	pMonitorList->monitorStr = malloc (sizeof(char*));
-	if (pMonitorList->monitorStr == AML_NULL)
-	{
-		CA_DEBUG(0, "[%s] pMonitorList->monitorStr malloc memory failed\n", __FUNCTION__);
-		return IRD_FAILURE;
-	}
-
 	pthread_mutex_lock(&_monitor_lock);
 
-	while (p_monitor_head != AML_NULL)
+	number = _get_monitor_list_num();
+	if (number != 0)
 	{
-		p_del_monitor = p_monitor_head;
-
-		CA_DEBUG(0, "[%s] pMonitorList->monitorStr[%d], strlen = %d\n", __FUNCTION__, count, strlen(p_del_monitor->monitorStr));
-		// add 1 byte to fill the end of string '\0'
-		pMonitorList->monitorStr[count] = (char *)malloc(strlen(p_del_monitor->monitorStr) + 1);
-		if (pMonitorList->monitorStr[count] == AML_NULL)
+		pMonitorList->monitorStr = malloc(sizeof(char*));
+		if (pMonitorList->monitorStr == AML_NULL)
 		{
-			CA_DEBUG(0, "[%s] pMonitorList->monitorStr[%d] malloc memory failed\n", __FUNCTION__, count);
-			break;
+			CA_DEBUG(0, "[%s] pMonitorList->monitorStr malloc memory failed\n", __FUNCTION__);
+			pMonitorList->monitorCount = 0;
+			status = IRD_FAILURE;
+			goto exit;
 		}
 
-		memset(pMonitorList->monitorStr[count], 0x00, strlen(p_del_monitor->monitorStr) + 1);
-		memcpy(pMonitorList->monitorStr[count], p_del_monitor->monitorStr, strlen(p_del_monitor->monitorStr));
+		while (p_monitor_head != AML_NULL)
+		{
+			p_del_monitor = p_monitor_head;
 
-		p_monitor_head = p_monitor_head->next;
+			CA_DEBUG(0, "[%s] pMonitorList->monitorStr[%d], strlen = %d\n", __FUNCTION__, count, strlen(p_del_monitor->monitorStr));
+			// add 1 byte to fill the end of string '\0'
+			pMonitorList->monitorStr[count] = (char *)malloc(strlen(p_del_monitor->monitorStr) + 1);
+			if (pMonitorList->monitorStr[count] == AML_NULL)
+			{
+				CA_DEBUG(0, "[%s] pMonitorList->monitorStr[%d] malloc memory failed\n", __FUNCTION__, count);
+				break;
+			}
 
-		free(p_del_monitor->monitorStr);
-		free(p_del_monitor);
+			memset(pMonitorList->monitorStr[count], 0x00, strlen(p_del_monitor->monitorStr) + 1);
+			memcpy(pMonitorList->monitorStr[count], p_del_monitor->monitorStr, strlen(p_del_monitor->monitorStr));
 
-		count++;
+			p_monitor_head = p_monitor_head->next;
+
+			free(p_del_monitor->monitorStr);
+			free(p_del_monitor);
+
+			count++;
+		}
+
+		pMonitorList->monitorCount = count;
 	}
-
-	pMonitorList->monitorCount = count;
-	if ((count == 0) && (pMonitorList->monitorStr != AML_NULL))
+	else
 	{
-		free(pMonitorList->monitorStr);
+		pMonitorList->monitorStr = AML_NULL;
+		pMonitorList->monitorCount = 0;
 	}
 
+	CA_DEBUG(0, "[%s] get MonitorList count: %d\n", __FUNCTION__, count);
+
+exit:
 	pthread_mutex_unlock(&_monitor_lock);
 
-	return IRD_NO_ERROR;
+	CA_DEBUG(0, "[%s] step out\n", __FUNCTION__);
+
+	return status;
 }
 
 void AM_APP_FreeServiceMonitorList(service_monitor_list_st pMonitorList)
@@ -1570,6 +1764,8 @@ void AM_APP_FreeServiceMonitorList(service_monitor_list_st pMonitorList)
 	}
 
 	pthread_mutex_unlock(&_monitor_lock);
+
+	CA_DEBUG(0, "[%s] step out\n", __FUNCTION__);
 
 	return;
 }

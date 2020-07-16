@@ -32,6 +32,8 @@ LOCAL_SRC_FILES := \
 	src/ird_glue.c \
 	src/ird_mail.c \
 	src/ird_errorcode.c \
+	src/ird_pvr.c \
+	src/ird_metadata.c
 
 LOCAL_C_INCLUDES := \
   $(LOCAL_PATH)/../libamcas/include	 \

@@ -143,6 +143,7 @@ typedef enum
 	APP_MESSAGE_TEXT,
 	APP_ATTRIBUTE_DISPLAY,
 	APP_FINGER_PRINT,
+	APP_PVR_MSG,
 } App_Msg_Type;
 
 typedef enum
@@ -174,6 +175,8 @@ typedef struct {
 /**Demux channel.*/
 struct HAL_DMX_Channel_s{
 	//HAL_DMX_Device_s  *dmx;     /**< The demux device contains this channel.*/
+	int				dmx_dev;
+	int				pipe_id;
 	int              id;      /**< The channel's index.*/
 	HAL_DMX_ChannelState state; /**< State of the channel.*/
 	int              pid;     /**< PID.*/
@@ -355,15 +358,6 @@ typedef struct _service_monitor_list
 	char		**monitorStr;
 } service_monitor_list_st;
 
-int ird_client_init(void);
-void ird_client_start(void);
-void ird_open_service();
-int ird_process_pmt(uint8_t *pdata, uint16_t len);
-int ird_process_cat(uint8_t *pdata, uint16_t len);
-uint32_t ird_get_cssn(void);
-
-
-int ird_test(void);
 
 Ird_status_t AM_APP_GetAllService(service_type_st *stAllService);
 Ird_status_t AM_APP_GetServiceStatus(uint32_t serviceHandle,  service_status_st *pService);

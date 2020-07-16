@@ -32,10 +32,11 @@
 
 #define DUMP_DEBUG
 
-#define DMX_DEVICE_NO  2
-#define DESC_DEVICE_NO  0
+#define PVR_SESSION_KEY_CHECK_LOOP (5)
+#define PVR_SESSION_KEY_CHECK_TIME (300)   //500ms
 
-#define MAX_AES_IV_LEN 16
+#define DMX_DEVICE_NO  (0)
+#define MAX_AES_IV_LEN (16)
 
 static pthread_mutex_t mutex_lock = PTHREAD_MUTEX_INITIALIZER;
 
@@ -46,7 +47,7 @@ static HAL_DESC_Slot s_desc_slots[HAL_DESC_SLOT_NUM];
 static uint8_t session_key[16];
 static uint8_t s_aes_cbc_iv[MAX_AES_IV_LEN] = {0x49, 0x72, 0x64, 0x65, 0x74, 0x6f, 0xa9, 0x43, 0x6f, 0x70, 0x79, 0x72, 0x69, 0x67, 0x68, 0x74};
 
-static int32_t pipe_id = -1;
+static int b_set_pvr_session_key = 0;
 
 static void process_section_callback(int dev_no, int fid, const uint8_t *data, int len, void *user_data)
 {
@@ -85,7 +86,7 @@ static void process_section_callback(int dev_no, int fid, const uint8_t *data, i
 				FILE *fpt;
 				int i = 0;
 
-				fpt = fopen("/data/section.txt","a");
+				fpt = fopen("/data/vendor/irdeto/section.txt","a");
 				for (i = 0 ; i < sections.length; i++)
 				{
 					fprintf(fpt, "0x%02x ", sections.bytes[i]);
@@ -253,11 +254,43 @@ Ird_status_t Spi_Stream_SetCSSK(uc_cssk_info * pCSSKInfo)
 	return ret;
 }
 
+Ird_status_t Spi_Wait_SetPVRSession_Key()
+{
+	Ird_status_t ret = IRD_NO_ERROR;
+	int count = 0;
+
+	CA_DEBUG(0, "[%s] step in\n", __FUNCTION__);
+
+	while (count < PVR_SESSION_KEY_CHECK_LOOP)
+	{
+
+		CA_DEBUG(0, "[%s] to check if set PVR session key, times: %d\n", __FUNCTION__, count);
+
+		if (b_set_pvr_session_key == 1)
+		{
+			break;
+		}
+
+		usleep(PVR_SESSION_KEY_CHECK_TIME * 1000);
+		count ++;
+	}
+
+	if (count == PVR_SESSION_KEY_CHECK_LOOP)
+	{
+		ret = IRD_NOT_READY;
+	}
+
+	CA_DEBUG(0, "[%s] step out\n", __FUNCTION__);
+
+	return ret;
+}
+
 uc_result UniversalClientSPI_Stream_Open(uc_connection_stream_type streamType,
 								const uc_stream_open_params *pStreamOpenParams, uc_stream_handle *pStreamHandle)
 {
 	HAL_DMX_Channel *ch = AML_NULL;
 	uint32_t index = 0;
+	int dmx_dev = -1;
 
 	CA_DEBUG(0, "[%s]: step in\n", __FUNCTION__);
 
@@ -272,18 +305,23 @@ uc_result UniversalClientSPI_Stream_Open(uc_connection_stream_type streamType,
 		}
 	}
 
-	ch->stream_type = streamType;
-	ch->pid = pStreamOpenParams->caStream.pid;
-	ch->state = HAL_DMX_CHANNEL_STATE_ALLOCATED;
-
 	CA_DEBUG(0, "[%s]: process streamType: %d\n", __FUNCTION__, streamType);
 
 	CA_DEBUG(0, "pServiceContext: %x\n", pStreamOpenParams->pServiceContext);
 	CA_DEBUG(0, "protocol type: %d, pid: %x\n", pStreamOpenParams->caStream.protocolType, pStreamOpenParams->caStream.pid);
 
+	ch->stream_type = streamType;
+	ch->pid = pStreamOpenParams->caStream.pid;
+	ch->state = HAL_DMX_CHANNEL_STATE_ALLOCATED;
+
+	dmx_dev = ird_get_dmx_dev(pStreamOpenParams->pServiceContext);
+	ch->dmx_dev = (dmx_dev != -1)?dmx_dev:DMX_DEVICE_NO;
+
+	CA_DEBUG(0, "get and set demux device no: %d\n", ch->dmx_dev);
+
 	*pStreamHandle = ch->id;
 
-	CA_DEBUG(0, "[%s]: stream open success, streamHandle: %d\n", __FUNCTION__, *pStreamHandle);
+	CA_DEBUG(0, "[%s]: stream open success, dmx_dev: %d, streamHandle: %d\n", __FUNCTION__, ch->dmx_dev, *pStreamHandle);
 
 	pthread_mutex_unlock(&mutex_lock);
 
@@ -293,9 +331,10 @@ uc_result UniversalClientSPI_Stream_Open(uc_connection_stream_type streamType,
 
 uc_result UniversalClientSPI_Stream_Close(uc_stream_handle *pStreamHandle)
 {
-	HAL_DMX_Channel *ch= AML_NULL;
+	HAL_DMX_Channel *ch = AML_NULL;
 	HAL_DMX_Filter  *f = AML_NULL;
 	uint32_t index = 0;
+	uc_connection_stream_type streamType;
 
 	CA_DEBUG(0, "[%s]: step in\n", __FUNCTION__);
 
@@ -324,12 +363,18 @@ uc_result UniversalClientSPI_Stream_Close(uc_stream_handle *pStreamHandle)
 
 	ch->state = HAL_DMX_CHANNEL_STATE_IDLE;
 
+	streamType = (uc_connection_stream_type)ch->stream_type;
+	if ((streamType == UC_CONNECTION_STREAM_TYPE_PVR_RECORD) || (streamType == UC_CONNECTION_STREAM_TYPE_PVR_PLAYBACK))
+	{
+		CA_DEBUG(0, "[%s]: set PVR session key flag to false\n", __FUNCTION__);
+		b_set_pvr_session_key = 0;
+	}
+
 	pthread_mutex_unlock(&mutex_lock);
 
 	CA_DEBUG(0, "[%s]: step out\n", __FUNCTION__);
 	return UC_ERROR_SUCCESS;
 }
-
 
 uc_result UniversalClientSPI_Stream_Start(uc_stream_handle streamHandle)
 {
@@ -358,7 +403,7 @@ uc_result UniversalClientSPI_Stream_Start(uc_stream_handle streamHandle)
 	{
 		CA_DEBUG(0, "[%s]: start filter pointer: 0x%x \n", __FUNCTION__, f);
 
-		ret = am_dmx_start_filter(DMX_DEVICE_NO, f->fd);
+		ret = am_dmx_start_filter(ch->dmx_dev, f->fd);
 		CA_DEBUG(0, "[%s]: start filter filterHandle %d, ret = %d\n", __FUNCTION__, f->fd, ret);
 
 		f->state = HAL_DMX_FILTER_STATE_ENABLED;
@@ -400,7 +445,7 @@ uc_result UniversalClientSPI_Stream_Stop(uc_stream_handle streamHandle)
 	{
 		CA_DEBUG(0, "[%s]: stop filter pointer: 0x%x\n", __FUNCTION__, f);
 
-		ret = am_dmx_stop_filter(DMX_DEVICE_NO, f->fd);
+		ret = am_dmx_stop_filter(ch->dmx_dev, f->fd);
 		CA_DEBUG(0, "[%s]: stop filter filterHandle %d, ret = %d\n", __FUNCTION__, f->fd, ret);
 
 		f = f->next;
@@ -476,7 +521,7 @@ uc_result UniversalClientSPI_Stream_OpenFilter(uc_stream_handle streamHandle, uc
 	CA_DEBUG(0, "----end\n");
 #endif
 
-	result = am_dmx_alloc_filter(DMX_DEVICE_NO, &fhandle);
+	result = am_dmx_alloc_filter(ch->dmx_dev, &fhandle);
 	if (result != 0)
 	{
 		CA_DEBUG(0, "[%s]: dmx allocate filter fail\n", __FUNCTION__);
@@ -485,8 +530,8 @@ uc_result UniversalClientSPI_Stream_OpenFilter(uc_stream_handle streamHandle, uc
 	}
 
 	f->fd = fhandle;
-    ret = am_dmx_set_callback(DMX_DEVICE_NO, f->fd, process_section_callback, AML_NULL);
-	ret = am_dmx_set_buffer_size(DMX_DEVICE_NO, f->fd, f->channel->buffer_size);
+	ret = am_dmx_set_callback(ch->dmx_dev, f->fd, process_section_callback, AML_NULL);
+	ret = am_dmx_set_buffer_size(ch->dmx_dev, f->fd, f->channel->buffer_size);
 
 	*pFilterHandle = f->id;
 
@@ -582,10 +627,10 @@ uc_result UniversalClientSPI_Stream_SetFilter(uc_filter_handle filterHandle, con
 		{
 			CA_DEBUG(1, "[%s]: set filter, fd:%d, pid: %x, buffer size:0x%x, state: %d\n", __FUNCTION__, f->fd, f->channel->pid, f->channel->buffer_size, f->channel->state);
 
-			ret = am_dmx_set_sec_filter(DMX_DEVICE_NO, f->fd, &params);
+			ret = am_dmx_set_sec_filter(f->channel->dmx_dev, f->fd, &params);
 			if (f->channel->state == HAL_DMX_CHANNEL_STATE_STARTED)
 			{
-				ret |= am_dmx_start_filter(DMX_DEVICE_NO, f->fd);
+				ret |= am_dmx_start_filter(f->channel->dmx_dev, f->fd);
 				f->state = HAL_DMX_FILTER_STATE_ENABLED;
 			}
 
@@ -596,9 +641,9 @@ uc_result UniversalClientSPI_Stream_SetFilter(uc_filter_handle filterHandle, con
 		{
 			CA_DEBUG(1, "[%s]: set filter, fd:%d, pid: %x\n", __FUNCTION__, f->fd, f->channel->pid);
 
-			ret = am_dmx_stop_filter(DMX_DEVICE_NO, f->fd);
-			ret |= am_dmx_set_sec_filter(DMX_DEVICE_NO, f->fd, &params);
-			ret |= am_dmx_start_filter(DMX_DEVICE_NO, f->fd);
+			ret = am_dmx_stop_filter(f->channel->dmx_dev, f->fd);
+			ret |= am_dmx_set_sec_filter(f->channel->dmx_dev, f->fd, &params);
+			ret |= am_dmx_start_filter(f->channel->dmx_dev, f->fd);
 		}
 
 		CA_DEBUG(1, "DMX_SET_FILTER ret:%d, pid:%#x, fd:%d, depth len:%d\n", ret, f->pid, f->fd, f->depth);
@@ -682,8 +727,8 @@ uc_result UniversalClientSPI_Stream_CloseFilter(uc_stream_handle streamHandle, u
 	CA_DEBUG(0, "----end\n");
 #endif
 
-	am_dmx_stop_filter(DMX_DEVICE_NO, del_f->fd);
-	ret = am_dmx_free_filter(DMX_DEVICE_NO, del_f->fd);
+	am_dmx_stop_filter(ch->dmx_dev, del_f->fd);
+	ret = am_dmx_free_filter(ch->dmx_dev, del_f->fd);
 
 	CA_DEBUG(0, "[%s]: close filter: %d, ret = %d\n", __FUNCTION__, del_f->fd, ret);
 
@@ -784,6 +829,8 @@ uc_result UniversalClientSPI_Stream_AddComponent(uc_stream_handle streamHandle,
 
 	CA_DEBUG(0, "[%s]: step in\n", __FUNCTION__);
 
+	CA_DEBUG(0, "[%s]: add component for streamHandle: %d\n", __FUNCTION__, streamHandle);
+
 	pthread_mutex_lock(&mutex_lock);
 
 	for (index = 0; index < HAL_N_ELEM(s_dmx_channels); index++)
@@ -807,11 +854,20 @@ uc_result UniversalClientSPI_Stream_AddComponent(uc_stream_handle streamHandle,
 
 	if (index < HAL_N_ELEM(s_desc_slots))
 	{
+#if 0
 		if (ch->descramblers == AML_NULL)
 		{
-			ret = pipeline_create(DESC_DEVICE_NO, PIPELINE_MODE_LIVE, &pipe_id);
-			CA_DEBUG(0, "[%s]: pipeline_create, ret = %d \n", __FUNCTION__, ret);
+			pipeline_mode_e mode = PIPELINE_MODE_LIVE;
+			if (ch->dmx_dev != 0)
+			{
+				mode = PIPELINE_MODE_RECORD;
+			}
+
+			ret = pipeline_create(ch->dmx_dev, mode, &ch->pipe_id);
+			CA_DEBUG(0, "[%s]: create pipeline for dmx_dev: %d, ret: %d, mode: %d, pipe_id: %d\n", __FUNCTION__, \
+												ch->dmx_dev, ret, mode, ch->pipe_id);
 		}
+#endif
 
 		desc->next     = ch->descramblers;
 		ch->descramblers = desc;
@@ -837,6 +893,8 @@ uc_result UniversalClientSPI_Stream_RemoveComponent(uc_stream_handle streamHandl
     int ret = -1;
 
 	CA_DEBUG(0, "[%s]: step in\n", __FUNCTION__);
+
+	CA_DEBUG(0, "[%s]: remove component for streamHandle: %d\n", __FUNCTION__, streamHandle);
 
 	pthread_mutex_lock(&mutex_lock);
 
@@ -876,18 +934,20 @@ uc_result UniversalClientSPI_Stream_RemoveComponent(uc_stream_handle streamHandl
 	if (del_desc->fd != -1)
 	{
 		ret = MSR_DscRemovePid(del_desc->fd, del_desc->pid);
-		CA_DEBUG(0, "[%s]:remove pid: %d, ret = %x\n", __FUNCTION__, del_desc->pid, ret);
+		CA_DEBUG(0, "[%s]:remove pid: %x, ret = %d\n", __FUNCTION__, del_desc->pid, ret);
+
+		ret = MSR_DscClose(desc->fd);
+		CA_DEBUG(0, "[%s]:close desc, ret = %d\n", __FUNCTION__, ret);
 	}
 
+#if 0
 	if (ch->descramblers == AML_NULL)
 	{
-		ret = MSR_DscClose(desc->fd);
-		CA_DEBUG(0, "[%s]:no any add pid, close desc, ret = %x\n", __FUNCTION__, ret);
-
-		ret = pipeline_release(pipe_id);
-		pipe_id = -1;
-		CA_DEBUG(0, "[%s]: pipeline_release, ret = %d \n", __FUNCTION__, ret);
+		ret = pipeline_release(ch->pipe_id);
+		CA_DEBUG(0, "[%s]: release pipeline, ret: %d, pipe_id: %d \n", __FUNCTION__, ret, ch->pipe_id);
+		ch->pipe_id = -1;
 	}
+#endif
 
 	del_desc->fd = -1;
 	del_desc->channel = AML_NULL;
@@ -916,7 +976,7 @@ uc_result UniversalClientSPI_Stream_SetDescramblingKey(uc_stream_handle streamHa
 
 	CA_DEBUG(0, "[%s]: step in\n", __FUNCTION__);
 
-	CA_DEBUG(0, "[%s]: Algorithm: %d, KeyProtection:%d, KeyLen:%d, keyVersion:%d\n", __FUNCTION__, \
+	CA_DEBUG(0, "[%s]: streamHandle: %d, Algorithm: 0x%02x, KeyProtection: %d, KeyLen: %d, keyVersion: %d\n", __FUNCTION__, streamHandle, \
 						pKeyInfo->descramblingKeyAlgorithm, pKeyInfo->descramblingKeyProtection, \
 						pKeyInfo->pDescramblingKey->length, keyVersion);
 
@@ -958,23 +1018,30 @@ uc_result UniversalClientSPI_Stream_SetDescramblingKey(uc_stream_handle streamHa
 					break;
 
 				case UC_DK_ALGORITHM_AES_128_CBC:
+				case UC_DK_ALGORITHM_IRDETO_AES_128_CBC:
 					algo = DSC_ALGORITHM_AES_128_CBC;
 					break;
 			}
 
-			ret = MSR_DscOpen(DESC_DEVICE_NO, algo, &nSlot);
+			ret = MSR_DscOpen(ch->dmx_dev, algo, &nSlot);
 			if (ret == 0)
 			{
-				snprintf(buf, sizeof(buf), "/sys/class/stb/dsc%d_source", DESC_DEVICE_NO);
-				snprintf(source, sizeof(source), "dmx%d", DESC_DEVICE_NO);
-				file_echo(buf, source);
+				CA_DEBUG(0, "desc open success, nSlot = %d\n", nSlot);
+			}
+			else
+			{
+				CA_DEBUG(0, "desc open error, ret = %d\n", ret);
 			}
 
 			desc->fd = nSlot;
 			ret = MSR_DscAddPid(desc->fd, desc->pid);
-			if (ret != 0)
+			if (ret == 0)
 			{
-				CA_DEBUG(0, "desc set pid error\n");
+				CA_DEBUG(0, "desc set pid(%x) success, nSlot: %d\n", desc->pid, nSlot);
+			}
+			else
+			{
+				CA_DEBUG(0, "desc set pid(%x) error, ret = %d\n", desc->pid, ret);
 			}
 
 			desc->state = HAL_DESC_STATE_ENABLED;
@@ -1071,6 +1138,7 @@ uc_result UniversalClientSPI_IFCP_LoadImage(uc_IFCP_image *pImage)
 uc_result UniversalClientSPI_IFCP_Communicate(uc_IFCP_input *pInput, uc_IFCP_output *pOutput)
 {
 	uc_result result = UC_ERROR_SUCCESS;
+	uc_stream_handle streamHandle;
 	HAL_DMX_Channel *ch = AML_NULL;
 	HAL_DESC_Slot	*desc = AML_NULL;
 	uint32_t index = 0;
@@ -1089,115 +1157,176 @@ uc_result UniversalClientSPI_IFCP_Communicate(uc_IFCP_input *pInput, uc_IFCP_out
 										pInput->pIFCPInfo->pKLCInfo->header[0], pInput->pIFCPInfo->pKLCInfo->header[1], pInput->pIFCPInfo->pKLCInfo->header[2], \
 										pInput->pIFCPInfo->pKLCInfo->ED_Ctrl, pInput->pIFCPInfo->pApplicationControlInfo);
 
-	CA_DEBUG(0, "[%s]: streamHandle: %x, keyVersion: %d, descramblingKeyAlgorithm: %d\n", __FUNCTION__, \
-									pInput->additionalInfo.forDescramblingKey.streamHandle, \
-									pInput->additionalInfo.forDescramblingKey.keyVersion, \
-									pInput->additionalInfo.forDescramblingKey.descramblingKeyAlgorithm);
+	switch (pInput->commandType)
+	{
+		case UC_IFCP_COMMAND_SET_DESCRAMBLING_KEY:
+		case UC_IFCP_COMMAND_LOAD_TDC:
+		{
+			CA_DEBUG(0, "[%s]: streamHandle: %x, keyVersion: %d, descramblingKeyAlgorithm: 0x%02x\n", __FUNCTION__, \
+											pInput->additionalInfo.forDescramblingKey.streamHandle, \
+											pInput->additionalInfo.forDescramblingKey.keyVersion, \
+											pInput->additionalInfo.forDescramblingKey.descramblingKeyAlgorithm);
+			streamHandle = pInput->additionalInfo.forDescramblingKey.streamHandle;
+			break;
+		}
+
+		case UC_IFCP_COMMAND_SET_PVR_SESSION_KEY:
+		{
+			CA_DEBUG(0, "[%s]: streamHandle: %x, algorithm: %d, keyIndex: 0x%x\n", __FUNCTION__, \
+											pInput->additionalInfo.forPVRSessionKey.streamHandle, \
+											pInput->additionalInfo.forPVRSessionKey.algorithm, \
+											pInput->additionalInfo.forPVRSessionKey.keyIndex);
+			streamHandle = pInput->additionalInfo.forPVRSessionKey.streamHandle;
+			break;
+		}
+	}
 
 	pthread_mutex_lock(&mutex_lock);
 
 	for (index = 0; index < HAL_N_ELEM(s_dmx_channels); index++)
 	{
 		ch = &s_dmx_channels[index];
-		if (ch->id == pInput->additionalInfo.forDescramblingKey.streamHandle)
+		if (ch->id == streamHandle)
 		{
 			break;
 		}
 	}
 
-	switch (pInput->additionalInfo.forDescramblingKey.keyVersion)
+	if (pInput->commandType != UC_IFCP_COMMAND_SET_PVR_SESSION_KEY)
 	{
-		case DSC_KEY_TYPE_EVEN:
+		/** load Transformation data container (TDC) structure by IFCP command */
+		if (pInput->commandType == UC_IFCP_COMMAND_LOAD_TDC)
 		{
-			key_type = 0;
-			break;
-		}
-
-		case DSC_KEY_TYPE_ODD:
-		{
-			key_type = 1;
-			break;
-		}
-	}
-
-	/** load Transformation data container (TDC) structure by IFCP command */
-	if (pInput->commandType == UC_IFCP_COMMAND_LOAD_TDC)
-	{
-		CA_DEBUG(0, "[SCOT] begin to copy key data\n");
-		copy_key_data(&key_data, &key_data_response, pInput, pOutput);
-		ret = IFCP_LoadScotData(&key_data, &key_data_response);
-		if (ret == 0)
-		{
-			CA_DEBUG(0, "[SCOT] kl_response_len = %d, buffer len = %d, size = %d\n", key_data_response.kl_response_len, key_data_response.kl_response.data_len, key_data_response.kl_response.size);
-			CA_DEBUG(0, "[SCOT] app_control_response_len = %d, buffer len = %d, size = %d\n", key_data_response.app_control_response_len, key_data_response.app_control_response.data_len, key_data_response.app_control_response.size);
-			pOutput->response.length = key_data_response.kl_response_len;
-			pOutput->appResponse.length = key_data_response.app_control_response_len;
-		}
-		else
-		{
-			CA_DEBUG(0, "[%s]: SCOT ifcp set descrambler key data failed, ret = %d\n", __FUNCTION__, ret);
-			result = UC_ERROR_NULL_PARAM;
-		}
-	}
-
-	desc = ch->descramblers;
-	while (desc)
-	{
-		if (desc->state == HAL_DESC_STATE_ALLOCATED)
-		{
-			switch (pInput->additionalInfo.forDescramblingKey.descramblingKeyAlgorithm)
-			{
-				case UC_DK_ALGORITHM_DVB_CSA:
-					algo = DSC_ALGORITHM_DVB_CSA;
-					break;
-
-				case UC_DK_ALGORITHM_AES_128_CBC:
-					algo = DSC_ALGORITHM_AES_128_CBC;
-					break;
-			}
-
-			ret = MSR_DscOpen(DESC_DEVICE_NO, algo, &nSlot);
-			if (ret == 0)
-			{
-				snprintf(buf, sizeof(buf), "/sys/class/stb/dsc%d_source", DESC_DEVICE_NO);
-				snprintf(source, sizeof(source), "dmx%d", DESC_DEVICE_NO);
-				file_echo(buf, source);
-			}
-
-			desc->fd = nSlot;
-			ret = MSR_DscAddPid(desc->fd, desc->pid);
-			if (ret != 0)
-			{
-				CA_DEBUG(0, "desc set pid error\n");
-			}
-
-			desc->state = HAL_DESC_STATE_ENABLED;
-		}
-
-		if (desc->state == HAL_DESC_STATE_ENABLED)
-		{
-			memset(&init_vector, 0x00, sizeof(k_buffer_t));
-			init_vector.p_data = s_aes_cbc_iv;
-			init_vector.data_len = MAX_AES_IV_LEN;
-
-			CA_DEBUG(0, "[non-SCOT] begin to copy key data\n");
+			CA_DEBUG(0, "[SCOT] begin to copy key data\n");
 			copy_key_data(&key_data, &key_data_response, pInput, pOutput);
-			ret = IFCP_SetDescramblingKeyData(desc->fd, key_type, &init_vector, &key_data, &key_data_response);
+			ret = IFCP_LoadScotData(&key_data, &key_data_response);
 			if (ret == 0)
 			{
-				CA_DEBUG(0, "[non-SCOT] kl_response_len = %d, buffer len = %d, size = %d\n", key_data_response.kl_response_len, key_data_response.kl_response.data_len, key_data_response.kl_response.size);
-				CA_DEBUG(0, "[non-SCOT] app_control_response_len = %d, buffer len = %d, size = %d\n", key_data_response.app_control_response_len, key_data_response.app_control_response.data_len, key_data_response.app_control_response.size);
+				CA_DEBUG(0, "[SCOT] kl_response_len = %d, buffer len = %d, size = %d\n", key_data_response.kl_response_len, key_data_response.kl_response.data_len, key_data_response.kl_response.size);
+				CA_DEBUG(0, "[SCOT] app_control_response_len = %d, buffer len = %d, size = %d\n", key_data_response.app_control_response_len, key_data_response.app_control_response.data_len, key_data_response.app_control_response.size);
 				pOutput->response.length = key_data_response.kl_response_len;
 				pOutput->appResponse.length = key_data_response.app_control_response_len;
 			}
 			else
 			{
-				CA_DEBUG(0, "[%s]: ifcp set descrambler key data failed, ret = %d\n", __FUNCTION__, ret);
+				CA_DEBUG(0, "[%s] SCOT ifcp set descrambler key data failed, ret = %d\n", __FUNCTION__, ret);
 				result = UC_ERROR_NULL_PARAM;
 			}
 		}
 
-		desc = desc->next;
+		switch (pInput->additionalInfo.forDescramblingKey.keyVersion)
+		{
+			case DSC_KEY_TYPE_EVEN:
+			{
+				key_type = 0;
+				break;
+			}
+
+			case DSC_KEY_TYPE_ODD:
+			{
+				key_type = 1;
+				break;
+			}
+		}
+
+		desc = ch->descramblers;
+		while (desc)
+		{
+			if (desc->state == HAL_DESC_STATE_ALLOCATED)
+			{
+				switch (pInput->additionalInfo.forDescramblingKey.descramblingKeyAlgorithm)
+				{
+					case UC_DK_ALGORITHM_DVB_CSA:
+						algo = DSC_ALGORITHM_DVB_CSA;
+						break;
+
+					case UC_DK_ALGORITHM_AES_128_CBC:
+					case UC_DK_ALGORITHM_IRDETO_AES_128_CBC:
+						algo = DSC_ALGORITHM_AES_128_CBC;
+						break;
+				}
+
+				ret = MSR_DscOpen(ch->dmx_dev, algo, &nSlot);
+				if (ret == 0)
+				{
+					CA_DEBUG(0, "desc open success, nSlot = %d\n", nSlot);
+				}
+				else
+				{
+					CA_DEBUG(0, "desc open error, ret = %d\n", ret);
+				}
+
+				desc->fd = nSlot;
+				ret = MSR_DscAddPid(desc->fd, desc->pid);
+				if (ret == 0)
+				{
+					CA_DEBUG(0, "desc set pid(%x) success, nSlot: %d\n", desc->pid, nSlot);
+				}
+				else
+				{
+					CA_DEBUG(0, "desc set pid(%x) error, ret = %d\n", desc->pid, ret);
+				}
+
+				desc->state = HAL_DESC_STATE_ENABLED;
+			}
+
+			if (desc->state == HAL_DESC_STATE_ENABLED)
+			{
+				memset(&init_vector, 0x00, sizeof(k_buffer_t));
+				init_vector.p_data = s_aes_cbc_iv;
+				init_vector.data_len = MAX_AES_IV_LEN;
+
+				CA_DEBUG(0, "[non-SCOT] begin to copy key data\n");
+				copy_key_data(&key_data, &key_data_response, pInput, pOutput);
+				ret = IFCP_SetDescramblingKeyData(desc->fd, key_type, &init_vector, &key_data, &key_data_response);
+				if (ret == 0)
+				{
+					CA_DEBUG(0, "[non-SCOT] kl_response_len = %d, buffer len = %d, size = %d\n", key_data_response.kl_response_len, key_data_response.kl_response.data_len, key_data_response.kl_response.size);
+					CA_DEBUG(0, "[non-SCOT] app_control_response_len = %d, buffer len = %d, size = %d\n", key_data_response.app_control_response_len, key_data_response.app_control_response.data_len, key_data_response.app_control_response.size);
+					pOutput->response.length = key_data_response.kl_response_len;
+					pOutput->appResponse.length = key_data_response.app_control_response_len;
+				}
+				else
+				{
+					CA_DEBUG(0, "[%s] ifcp set descrambler key data failed, ret = %d\n", __FUNCTION__, ret);
+					result = UC_ERROR_NULL_PARAM;
+				}
+			}
+
+			desc = desc->next;
+		}
+	}
+	else
+	{
+		pvr_crypto_algo_t algo;
+
+		CA_DEBUG(0, "[secure PVR] begin to copy key data\n");
+		copy_key_data(&key_data, &key_data_response, pInput, pOutput);
+
+		if (pInput->additionalInfo.forPVRSessionKey.algorithm == UC_DK_ALGORITHM_AES_128_CBC)
+		{
+			algo = PVR_CRYPTO_ALGO_AES;
+			ret = IFCP_SetPVRSessionKeyData(0, pInput->additionalInfo.forPVRSessionKey.keyIndex, algo, &key_data, &key_data_response);
+			if (ret == 0)
+			{
+				CA_DEBUG(0, "[secure PVR] kl_response_len = %d, buffer len = %d, size = %d\n", key_data_response.kl_response_len, key_data_response.kl_response.data_len, key_data_response.kl_response.size);
+				CA_DEBUG(0, "[secure PVR] app_control_response_len = %d, buffer len = %d, size = %d\n", key_data_response.app_control_response_len, key_data_response.app_control_response.data_len, key_data_response.app_control_response.size);
+
+				pOutput->response.length = key_data_response.kl_response_len;
+				pOutput->appResponse.length = key_data_response.app_control_response_len;
+
+				b_set_pvr_session_key = 1;
+			}
+			else
+			{
+				CA_DEBUG(0, "[%s] ifcp set PVR session key failed, ret = %d\n", __FUNCTION__, ret);
+				result = UC_ERROR_NULL_PARAM;
+			}
+		}
+		else
+		{
+			CA_DEBUG(0, "[%s] not support algorithm: %d\n", __FUNCTION__, pInput->additionalInfo.forPVRSessionKey.algorithm);
+		}
 	}
 
 	pthread_mutex_unlock(&mutex_lock);

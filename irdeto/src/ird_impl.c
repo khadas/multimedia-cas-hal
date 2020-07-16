@@ -184,11 +184,18 @@ uc_result UniversalClientSPI_Device_GetSecurityState(uc_device_security_state * 
 {
 	CA_DEBUG(0, "[%s]: step in\n", __FUNCTION__);
 
-	pDeviceSecurityState->crypto = SD_CRYPTO_CW_AES_SUPPORTED;
+	//pDeviceSecurityState->crypto = SD_CRYPTO_CW_AES_SUPPORTED;
+	pDeviceSecurityState->crypto = SD_CRYPTO_CW_AES_SUPPORTED | SD_CRYPTO_CW_3_LEVEL_KEY_LADDER_SUPPORTED | SD_CRYPTO_PVR_AES_SUPPORTED | SD_CRYPTO_PVR_3_LEVEL_KEY_LADDER_SUPPORTED;
+	//pDeviceSecurityState->crypto = SD_CRYPTO_CW_AES_SUPPORTED | SD_CRYPTO_PVR_AES_SUPPORTED;
+
 	pDeviceSecurityState->cwMode = 0;
 	pDeviceSecurityState->jtag = SD_JTAG_OPENED;
 	pDeviceSecurityState->modeIFCP = SD_IFCP_MODE_SUPPORTED;
 	pDeviceSecurityState->rsaMode = 0;
+
+	CA_DEBUG(0, "[%s]: crypto: 0x%x, cwMode: 0x%x, jtag: 0x%x, modeIFCP: 0x%x, rsaMode: 0x%02x\n",
+				__FUNCTION__, pDeviceSecurityState->crypto, pDeviceSecurityState->cwMode, pDeviceSecurityState->jtag, \
+				pDeviceSecurityState->modeIFCP, pDeviceSecurityState->rsaMode);
 
 	CA_DEBUG(0, "[%s]: step out\n", __FUNCTION__);
 	return UC_ERROR_SUCCESS;
@@ -197,7 +204,13 @@ uc_result UniversalClientSPI_Device_GetSecurityState(uc_device_security_state * 
 uc_result UniversalClientSPI_Device_GetPVRSecurityState(uc_pvr_security_state * pPVRSecurityState)
 {
 	CA_DEBUG(0, "[%s]: step in\n", __FUNCTION__);
-	pPVRSecurityState->valid = UC_FALSE;
+
+	pPVRSecurityState->valid = UC_TRUE;
+	pPVRSecurityState->level = 3;
+	pPVRSecurityState->algorithm = UC_DK_PROTECTION_AES;
+
+	CA_DEBUG(0, "[%s]: valid: 0x%x, level: 0x%x, algorithm: 0x%x\n", __FUNCTION__, \
+		pPVRSecurityState->valid, pPVRSecurityState->level, pPVRSecurityState->algorithm);
 	CA_DEBUG(0, "[%s]: step out\n", __FUNCTION__);
 	return UC_ERROR_SUCCESS;
 }
@@ -447,6 +460,16 @@ uc_sint32 UniversalClient_Stdlib_printf(const uc_char *pFormat, ...)
 #if 0
     va_start(args, pFormat);
     retVal = vfprintf(stdout, pFormat, args);
+    va_end(args);
+#endif
+
+#if 0
+    char string_buf[1024] = {0};
+    memset(string_buf, 0x00, sizeof(string_buf));
+
+    va_start(args, pFormat);
+    vsprintf(string_buf, pFormat, args);
+    CA_DEBUG(0, "%s", string_buf);
     va_end(args);
 #endif
 
