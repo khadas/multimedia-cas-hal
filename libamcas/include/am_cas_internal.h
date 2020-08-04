@@ -77,14 +77,16 @@ struct AM_CA_Impl_t
     int (*update_descrambling_pid)(CasSession session, uint16_t oldStreamPid, uint16_t newStreamPid);
     int (*stop_descrambling)(CasSession session);
     int (*set_emm_pid)(CasHandle handle, int dmx_dev, uint16_t emmPid);
+    int (*dvr_set_pre_param)(CasSession session, AM_CA_PreParam_t *param);
     int (*dvr_start)(CasSession session, AM_CA_ServiceInfo_t *service_info);
     int (*dvr_stop)(CasSession session);
     int (*dvr_encrypt)(CasSession session, AM_CA_CryptoPara_t *cryptoPara);
     int (*dvr_decrypt)(CasSession session, AM_CA_CryptoPara_t *cryptoPara);
     int (*dvr_replay)(CasSession session, AM_CA_CryptoPara_t *cryptoPara);
     int (*dvr_stop_replay)(CasSession session);
-    SecMemHandle (*create_secmem)(CA_SERVICE_TYPE_t type, void **pSecBuf, uint32_t *size);
-    int (*destroy_secmem)(SecMemHandle handle);
+    int (*dvr_deleterecordfile)(const char *location);
+    SecMemHandle (*create_secmem)(CasSession session, CA_SERVICE_TYPE_t type, void **pSecBuf, uint32_t *size);
+    int (*destroy_secmem)(CasSession session, SecMemHandle handle);
 
     int (*register_event_cb)(CasSession session, CAS_EventFunction_t event_fn);
     int (*ioctl)(CasSession session, const char *in_json, const char *out_json, uint32_t out_len);

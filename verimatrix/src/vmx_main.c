@@ -119,12 +119,13 @@ static int vmx_stop_descrambling(CasSession session);
 static int vmx_set_emm_pid(CasHandle handle, int dmx_dev, uint16_t emmPid);
 static int vmx_dvr_start(CasSession session, AM_CA_ServiceInfo_t *service_info);
 static int vmx_dvr_stop(CasSession session);
+static int vmx_dvr_set_pre_param(CasSession session, AM_CA_PreParam_t *param);
 static int vmx_dvr_encrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara);
 static int vmx_dvr_decrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara);
 static int vmx_dvr_replay(CasSession session, AM_CA_CryptoPara_t *cryptoPara);
 static int vmx_dvr_stop_replay(CasSession session);
-static SecMemHandle vmx_create_secmem(CA_SERVICE_TYPE_t type, void **pSecBuf, uint32_t *size);
-static int vmx_destroy_secmem(SecMemHandle handle);
+static SecMemHandle vmx_create_secmem(CasSession ca_session, CA_SERVICE_TYPE_t type, void **pSecBuf, uint32_t *size);
+static int vmx_destroy_secmem(CasSession ca_session, SecMemHandle handle);
 static int vmx_register_event_cb(CasSession session, CAS_EventFunction_t event_fn);
 static int vmx_ioctl(CasSession session, const char *in_json, const char *out_json, uint32_t out_len);
 static char *vmx_get_version(void);
@@ -158,6 +159,7 @@ const struct AM_CA_Impl_t cas_ops =
 .start_descrambling = vmx_start_descrambling,
 .update_descrambling_pid = vmx_update_descrambling_pid,
 .stop_descrambling = vmx_stop_descrambling,
+.dvr_set_pre_param =vmx_dvr_set_pre_param,
 .set_emm_pid = vmx_set_emm_pid,
 .dvr_start = vmx_dvr_start,
 .dvr_stop = vmx_dvr_stop,
@@ -899,6 +901,13 @@ static int vmx_stop_descrambling(CasSession session)
     return 0;
 }
 
+static int vmx_dvr_set_pre_param(CasSession session, AM_CA_PreParam_t *param) {
+  UNUSED(session);
+  CA_DEBUG(1, "vmx_dvr_set_pre_param dmx[%d].", param->dmx_dev);
+  return 0;
+}
+
+
 static int vmx_set_emm_pid(CasHandle handle, int dmx_dev, uint16_t emmPid)
 {
     UNUSED(handle);
@@ -1258,7 +1267,7 @@ static int vmx_dvr_stop_replay(CasSession session)
     return 0;
 }
 
-static SecMemHandle vmx_create_secmem(CA_SERVICE_TYPE_t type, void **pSecBuf, uint32_t *size)
+static SecMemHandle vmx_create_secmem(CasSession ca_session, CA_SERVICE_TYPE_t type, void **pSecBuf, uint32_t *size)
 {
     uint32_t allocflag = 0;
     uint32_t secmemflag = 0;
@@ -1310,7 +1319,7 @@ exit:
     return (SecMemHandle)handle;
 }
 
-static int vmx_destroy_secmem(SecMemHandle handle)
+static int vmx_destroy_secmem(CasSession ca_session, SecMemHandle handle)
 {
     int ret;
 

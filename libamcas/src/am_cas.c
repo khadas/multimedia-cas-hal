@@ -60,23 +60,23 @@ int loadCASLibrary(void)
         if (pfile && (strcmp(pfile, "_dvb.so") == 0)) {
             CA_DEBUG(0, "CAS library %s found", dp->d_name);
             if (!(dl_handle = dlopen(dp->d_name, RTLD_NOW | RTLD_GLOBAL))) {
-                CA_DEBUG(2, "dlopen %s failed, %s", dp->d_name, strerror(errno));
+                CA_DEBUG(0, "dlopen %s failed, %s", dp->d_name, strerror(errno));
                 continue;
             }
             if (!(cas_ops = (struct AM_CA_Impl_t *)dlsym(dl_handle, "cas_ops"))) {
-                CA_DEBUG(2, "dlsym cas_ops failed, %s", strerror(errno));
+                CA_DEBUG(0, "dlsym cas_ops failed, %s", strerror(errno));
                 dlclose(dl_handle);
                 continue;
             }
 
             g_cas_loaded = 1;
 
-	    if (strcmp(cas_ops->get_version(), CAS_HAL_VER)) {
-		CA_DEBUG(1, "%s cas library[%s] and cas hal[%s] not matched",
-			cas_ops->get_version(), CAS_HAL_VER);
+        if (strcmp(cas_ops->get_version(), CAS_HAL_VER)) {
+          CA_DEBUG(1, "%s cas library[%s] and cas hal[%s] not matched",
+          cas_ops->get_version(), CAS_HAL_VER);
 
-		return -1;
-	    }
+          return -1;
+        }
             return cas_ops->pre_init();
         }
     }
@@ -271,11 +271,30 @@ AM_RESULT AM_CA_SetEmmPid(CasHandle handle, int dmx_dev, uint16_t emmPid)
     CAS_ASSERT(handle);
 
     if (cas_ops && cas_ops->set_emm_pid) {
-	return cas_ops->set_emm_pid(handle, dmx_dev, emmPid);
+      return cas_ops->set_emm_pid(handle, dmx_dev, emmPid);
     }
 
     return AM_ERROR_NOT_LOAD;
 }
+
+/**\brief Start DVR for the specified session of the CA system
+ * \param session serviceInfo privateInfo
+ * \param[in] session The opened session
+ * \param[in] serviceInfo The service information for recording
+ * \retval AM_SUCCESS On success
+ * \return Error code
+ */
+AM_RESULT AM_CA_DVRSetPreParam(CasSession session, AM_CA_PreParam_t *param)
+{
+    CAS_ASSERT(session);
+
+    if (cas_ops && cas_ops->dvr_start) {
+      return cas_ops->dvr_set_pre_param(session, param);
+    }
+
+    return AM_ERROR_NOT_LOAD;
+}
+
 
 /**\brief Start DVR for the specified session of the CA system
  * \param session serviceInfo privateInfo
@@ -290,7 +309,7 @@ AM_RESULT AM_CA_DVRStart(CasSession session, AM_CA_ServiceInfo_t *serviceInfo)
     CAS_ASSERT(serviceInfo);
 
     if (cas_ops && cas_ops->dvr_start) {
-	return cas_ops->dvr_start(session, serviceInfo);
+      return cas_ops->dvr_start(session, serviceInfo);
     }
 
     return AM_ERROR_NOT_LOAD;
@@ -378,7 +397,24 @@ AM_RESULT AM_CA_DVRStopReplay(CasSession session)
     CAS_ASSERT(session);
 
     if (cas_ops && cas_ops->dvr_stop_replay) {
-	return cas_ops->dvr_stop_replay(session);
+      return cas_ops->dvr_stop_replay(session);
+    }
+
+    return AM_ERROR_NOT_LOAD;
+}
+
+/**\brief delete ca record private file
+ * \param location
+ * \param[in] location The record file's location
+ * \retval AM_SUCCESS On success
+ * \return Error code
+ */
+AM_RESULT AM_CA_DVRDeleteRecordFile(const char *location)
+{
+    CAS_ASSERT(location);
+
+    if (cas_ops && cas_ops->dvr_deleterecordfile) {
+      return cas_ops->dvr_deleterecordfile(location);
     }
 
     return AM_ERROR_NOT_LOAD;
@@ -392,10 +428,10 @@ AM_RESULT AM_CA_DVRStopReplay(CasSession session)
  * \retval SecMemHandle On success
  * \return NULL
  */
-SecMemHandle AM_CA_CreateSecmem(CA_SERVICE_TYPE_t type, void **pSecBuf, uint32_t *size)
+SecMemHandle AM_CA_CreateSecmem(CasSession session, CA_SERVICE_TYPE_t type, void **pSecBuf, uint32_t *size)
 {
     if (cas_ops && cas_ops->create_secmem) {
-        return cas_ops->create_secmem(type, pSecBuf, size);
+        return cas_ops->create_secmem(session, type, pSecBuf, size);
     }
 
     return (SecMemHandle)NULL;
@@ -407,12 +443,12 @@ SecMemHandle AM_CA_CreateSecmem(CA_SERVICE_TYPE_t type, void **pSecBuf, uint32_t
  * \retval AM_SUCCESS On success
  * \return Error code
  */
-AM_RESULT AM_CA_DestroySecmem(SecMemHandle handle)
+AM_RESULT AM_CA_DestroySecmem(CasSession session, SecMemHandle handle)
 {
     CAS_ASSERT(handle);
 
     if (cas_ops && cas_ops->destroy_secmem) {
-        return cas_ops->destroy_secmem(handle);
+        return cas_ops->destroy_secmem(session, handle);
     }
 
     return AM_ERROR_NOT_LOAD;
