@@ -23,7 +23,8 @@ LOCAL_ARM_MODE := arm
 LOCAL_SRC_FILES := \
     src/vmx_main.c \
     src/vmx_interact.c \
-    src/vmx_porting.c
+    src/vmx_porting.c \
+    src/vmx_smc.c
 
 LOCAL_C_INCLUDES := \
 		$(LOCAL_PATH)/include \

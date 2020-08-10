@@ -666,6 +666,7 @@ static int vmx_pre_init(void)
 
     CA_init();
     vmx_port_init();
+    am_smc_init();
 
     vmx_bc_lock();
     bcRet = BC_Init();

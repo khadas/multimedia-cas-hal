@@ -20,12 +20,15 @@ LOCAL_MODULE := liblinuxdvb_port
 LOCAL_MULTILIB := 32
 LOCAL_ARM_MODE := arm
 LOCAL_SRC_FILES := \
-    src/am_dmx.c
+    src/am_dmx.c \
+    src/am_smc.c \
+    src/aml.c
 
 LOCAL_C_INCLUDES := \
 		$(LOCAL_PATH) \
 		$(LOCAL_PATH)/include \
 		$(LOCAL_PATH)/../libamcas/include \
+		common/include/linux/amlogic \
 
 
 LOCAL_SHARED_LIBRARIES += liblog\

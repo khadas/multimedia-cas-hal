@@ -30,7 +30,6 @@
 #define MAX_NVM_BLOCK_NUM		10
 
 static int am_emm_buf_init();
-static void ( *am_smc_notify )() = NULL ;
 static int16_t  AM_FlushECM_Buffer( uint8_t bFilterId );
 extern int get_dmx_dev(int svc_idx);
 extern int find_dmx_dev(int16_t emmpid);
@@ -44,13 +43,6 @@ emm_filter_t 		g_emm_filter = {
 uint32_t g_start_time = 0;
 uint16_t g_ca_system_id = 0xFFFF;
 static uint8_t g_boxid[8] = {0};
-
-static uint32_t time_ms(void)
-{
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    return tv.tv_sec * 1000 + tv.tv_usec / 1000;
-}
 
 #if 1 //only for vmx_indiv
 void reset_indiv()
@@ -335,7 +327,7 @@ static void am_ecm_callback( int dev_no, int fid, const uint8_t *data, int len, 
     ca_section_length = AM_GET_SECTION_LENGTH( data ) + 3;
     //CA_DEBUG(0, "%s, cur_tid:%#x, cur_ver:%#x, cur_page:%#x, len:%d",  __FUNCTION__, cur_tid, cur_ver, cur_page, ca_section_length);
     if ( p_ecm_filter->e_filter_mode == k_PageSearch ) {
-        int ret = am_ecm_reorder( p_ecm_filter, data, len );
+        am_ecm_reorder( p_ecm_filter, data, len );
     } else if ( p_ecm_filter->e_filter_mode == k_PageLocked ) {
         //CA_DEBUG(0, "%s, cur_tid:%#x, cur_ver:%#x, cur_page:%#x, len:%d", __FUNCTION__, cur_tid, cur_ver, cur_page, ca_section_length);
         //CA_DEBUG(0, "%s, p_ecm_filter, tid:%#x, version:%#x, page:%#x", __FUNCTION__, p_ecm_filter->i_table_id, p_ecm_filter->i_version, p_ecm_filter->i_page);
@@ -686,64 +678,6 @@ int16_t  FS_StopDescrambling( uint8_t bServiceIdx )
     UNUSED(bServiceIdx);
     CA_DEBUG( 1, "@@call %s @@", __FUNCTION__ );
     return 0;
-}
-
-int16_t  MMI_SetSmartcard_State( enScState_t state )
-{
-    CA_DEBUG( 0, "@@call %s state=%d @@", __FUNCTION__, state );
-    //app_bc_lock();
-    //g_ca_system_id = 0x1724;//BC_Get_CASystemID();
-    //app_bc_unlock();
-    CA_DEBUG( 0, "%s CA system ID is %#x\n", __func__, g_ca_system_id );
-    return 0;
-}
-
-// --- SC ---
-int16_t  SC_Write( uint8_t *pabBuffer, uint16_t *pwLen, uint16_t wTimeout )
-{
-    CA_DEBUG( 3, "===>>in SC_Write, len:%d,timeout:%d buffer is :", *pwLen, wTimeout );
-    CA_DEBUG( 3, "===>>out SC_Write" );
-    return k_BcSuccess;
-}
-
-int16_t  SC_Read( uint8_t *pabBuffer, uint16_t *pwLen )
-{
-
-    if ( pabBuffer == NULL ) {
-        CA_DEBUG( 1, "%s, param buf is null", __FUNCTION__ );
-        return k_BcError;
-    }
-    CA_DEBUG( 3, "===>>out SC_Read, write is completed ,return sucess len:%d", *pwLen );
-    return k_BcSuccess;
-}
-
-int16_t  SC_IOCTL( enCmd_t cmd, void_t *pvParams, uint16_t *pwLen )
-{
-
-    switch ( cmd ) {
-    case k_ConnectSc:
-        CA_DEBUG( 2, "@@call %s cmd:k_ConnectSc", __FUNCTION__ );
-        am_smc_notify = pvParams;
-        break;
-    case k_DisconnectSc:
-        CA_DEBUG( 2, "@@call %s cmd:k_DisconnectSc", __FUNCTION__ );
-        am_smc_notify = NULL;
-        break;
-    case k_ResetSc:
-        CA_DEBUG( 2, "@@call %s cmd:k_ResetSc", __FUNCTION__ );
-        break;
-    case k_GetATRSc:
-        CA_DEBUG( 2, "@@call %s cmd:k_GetATRSc", __FUNCTION__ );
-        break;
-    case k_CardDetectSc:
-        CA_DEBUG( 2, "@@call %s cmd:k_CardDetectSc", __FUNCTION__ );
-        am_smc_notify( BC_SC_REMOVED );
-        break;
-    default:
-        CA_DEBUG( 1, "@@call %s, unsupport cmd", __FUNCTION__ );
-        break;
-    }
-    return k_BcSuccess;
 }
 
 // --- System calls ---
