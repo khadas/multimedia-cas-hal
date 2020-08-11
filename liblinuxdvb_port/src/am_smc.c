@@ -41,6 +41,8 @@ extern const AM_SMC_Driver_t emu_drv;
 extern const AM_SMC_Driver_t aml_smc_drv;
 #endif
 
+pthread_mutex_t am_gAdpLock = PTHREAD_MUTEX_INITIALIZER;
+
 static AM_SMC_Device_t smc_devices[] =
 {
 #ifdef EMU_SMC
