@@ -618,6 +618,15 @@ static void* vmx_indiv_thread(void *arg)
         CA_DEBUG(2, "Verimatrix individualization failed. ret:%d", ret);
     }
 
+    sprintf(cmd, "restorecon %s*", AM_NVM_FILE);
+    CA_DEBUG(0, "%s", cmd);
+    ret = system(cmd);
+    if (ret == 0) {
+	CA_DEBUG(0, "restorecon done");
+    } else {
+	CA_DEBUG(0, "restorecon failed:%d", ret);
+    }
+
     return NULL;
 }
 
