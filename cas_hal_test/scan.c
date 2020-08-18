@@ -13,7 +13,7 @@
 #include "AmTsPlayer.h"
 #include "am_dmx.h"
 #include "am_cas.h"
-#include "cas_scan.h"
+#include "scan.h"
 
 #define DMX_DEV_NO (0)
 

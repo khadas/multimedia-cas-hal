@@ -38,6 +38,7 @@
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -48,8 +49,8 @@
 #include "AmTsPlayer.h"
 #include "dvr_segment.h"
 #include "dvr_wrapper.h"
-#include "am_fend.h"
-#include "am_dsc.h"
+#include "dvb_utils.h"
+#include "fend.h"
 
 #ifdef UNUSED
 #undef UNUSED
@@ -57,7 +58,7 @@
 
 #include "am_cas.h"
 #include "cas_json.h"
-#include "cas_scan.h"
+#include "scan.h"
 
 #define INF(fmt, ...)       fprintf(stdout, fmt, ##__VA_ARGS__)
 #define ERR(fmt, ...)       fprintf(stderr, "error:" fmt, ##__VA_ARGS__)
@@ -110,49 +111,49 @@ static CasHandle g_cas_handle = 0;
 static CasTestSession play;
 static CasTestSession recorder;
 
-static int fend_lock(int dev_no) {
-    AM_FEND_OpenPara_t fpara;
-    struct dvb_frontend_parameters p;
-    fe_status_t status;
+static int fend_lock(int dev_no)
+{
+    int ret;
+    int fend_id;
+    int wait_time = 3;
+    dmd_delivery_t delivery;
+    dmd_tuner_event_t status;
 
-    UNUSED(dev_no);
-    memset(&fpara, 0, sizeof(fpara));
-    fpara.mode = FE_QAM;
-    AM_FEND_Open(FEND_DEV_NO, &fpara);
-
-    AM_FEND_SetMode(FEND_DEV_NO, fpara.mode);
-
-    p.frequency = 666000000;
-    p.u.qam.symbol_rate = 6870000;
-    p.u.qam.fec_inner = FEC_AUTO;
-    p.u.qam.modulation = QAM_64;
-
-    AM_FEND_Lock(FEND_DEV_NO, &p, &status);
-
-    AM_FEND_Close( FEND_DEV_NO );
-
-    if (status & FE_HAS_LOCK) {
-        INF("locked\n");
-        return 0;
+    if (open_fend(dev_no, &fend_id)) {
+	ERR("fend open failed\n");
     }
-    else {
-        INF("unlocked\n");
-        return -1;
+
+    memset(&delivery, 0, sizeof(delivery));
+    delivery.device_type = DMD_CABLE;
+    delivery.delivery.cable.frequency = 666000;
+    delivery.delivery.cable.symbol_rate = 6875;
+    delivery.delivery.cable.modulation = DMD_MOD_64QAM;
+    ret = dmd_lock_c(fend_id, &delivery);
+
+    INF("DVB-C: lock to freq:%d, modulation:%d symbol_rate:%d ret:%d \n",
+	delivery.delivery.cable.frequency,
+	delivery.delivery.cable.modulation,
+	delivery.delivery.cable.symbol_rate, 
+	ret);
+
+    if (ret) {
+	ERR("lock failed, ret:%d\n", ret);
+	return -1;
     }
+
+    while (wait_time--){
+	sleep(1);
+	status = get_dmd_lock_status(fend_id);
+	if (status == TUNER_STATE_LOCKED)
+	    break;
+    }
+
+    return 0;
 }
 
 static int dvb_init(void)
 {
     int ret;
-    AM_DSC_OpenPara_t dsc_para;
-
-    memset(&dsc_para, 0x0, sizeof(AM_DSC_OpenPara_t));
-
-    if (AM_DSC_Open(DSC_DEV_NO, &dsc_para)) {
-	CA_DEBUG(0, "dsc device open fail\n");
-    }
-
-    AM_DSC_SetSource(DSC_DEV_NO, AM_DSC_SRC_DMX0);
 
     ret = AM_CA_Init(&g_cas_handle);
     INF("CAS init ret = %d\r\n", ret);
@@ -950,8 +951,7 @@ int main(int argc, char *argv[])
     if (is_live(mode)) {
         fend_lock(fend_dev_no);
 
-        sprintf(cmd, "echo ts%d > /sys/class/stb/demux%d_source", FEND_DEV_NO, DMX_DEV_NO);
-        system(cmd);
+	dvb_set_demux_source(DMX_DEV_NO, DVB_DEMUX_SOURCE_TS0);
 
         aml_set_ca_system_id(VMX_SYS_ID);
         INF("%d programs scanned\r\n", aml_scan());
@@ -966,14 +966,16 @@ int main(int argc, char *argv[])
         INF("try to play file:%s scrambled:%d pause:0\r\n",
             tspath, scrambled);
 
-        sprintf(cmd, "echo hiu > /sys/class/stb/demux%d_source", DMX_DEV_NO);
-        system(cmd);
+	dvb_set_demux_source(DMX_DEV_NO, DVB_DEMUX_SOURCE_DMA0);
 
         start_playback(tspath, scrambled, 0);
     }
 
-    //AM_FileEcho("/sys/class/graphics/fb0/osd_display_debug", "1");
-    //AM_FileEcho("/sys/class/graphics/fb0/blank", "1");
+    sprintf(cmd, "echo 1 > /sys/class/graphics/fb0/osd_display_debug");
+    system(cmd);
+
+    sprintf(cmd, "echo 1 > /sys/class/graphics/fb0/blank");
+    system(cmd);
     while ( running ) {
         char buf[256];
         memset( buf, 0 , 256 );
@@ -1046,14 +1048,7 @@ int main(int argc, char *argv[])
                     strcpy(tspath, pfilename);
                     start_recording(DVR_DEV_NO, prog, tspath);
 
-                    sleep(1);
-                    sprintf(cmd, "echo hiu > /sys/class/stb/demux%d_source", DMX_DEV_NO_2ND);
-                    INF("%s\n", cmd);
-                    system(cmd);
-
-                    sprintf(cmd, "echo dmx%d > /sys/class/stb/source", DMX_DEV_NO_2ND);
-                    INF("%s\n", cmd);
-                    system(cmd);
+		    dvb_set_demux_source(DMX_DEV_NO_2ND, DVB_DEMUX_SOURCE_DMA0);
                     start_playback(prog, prog->scrambled, 0);
 
                 } else {
@@ -1088,8 +1083,6 @@ int main(int argc, char *argv[])
     if (has_playback(mode)) {
         stop_playback();
     }
-
-    AM_DSC_Close(DSC_DEV_NO);
 
     exit(0);
 }

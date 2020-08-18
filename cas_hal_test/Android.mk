@@ -4,7 +4,8 @@ include $(CLEAR_VARS)
 ifeq ($(SUPPORT_CAS), true)
 LOCAL_SRC_FILES:= \
 	cas_hal_test.c \
-    cas_scan.c
+	scan.c \
+	fend.c
 
 LOCAL_C_INCLUDES := \
         $(LOCAL_PATH)/../libamcas/include \
@@ -23,11 +24,10 @@ LOCAL_STATIC_LIBRARIES += \
     libcutils
 
 ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 30&& echo OK),OK)
-    LOCAL_SHARED_LIBRARIES += libteec libmediahal_tsplayer libamdvr libam_adp
+    LOCAL_SHARED_LIBRARIES += libteec libmediahal_tsplayer libamdvr
     LOCAL_PROPRIETARY_MODULE := true
 else
     LOCAL_SHARED_LIBRARIES += libteec_sys libmediahal_tsplayer.system libamdvr.product
-    LOCAL_STATIC_LIBRARIES += libam_adp
 endif
 
 LOCAL_MODULE_TAGS := optional
