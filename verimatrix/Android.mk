@@ -15,6 +15,27 @@
 
 LOCAL_PATH := $(call my-dir)
 
+ifeq ($(TARGET_BUILD_VERIMATRIX_DVB_LIB), true)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := libcaclientapi
+LOCAL_MULTILIB := 32
+LOCAL_MODULE_SUFFIX := .a
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_CLASS := STATIC_LIBRARIES
+LOCAL_SRC_FILES_arm := lib/$(LOCAL_MODULE).a
+LOCAL_MODULE_TAGS := optional
+include $(BUILD_PREBUILT)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := libvmx_ree_dual_aml
+LOCAL_MULTILIB := 32
+LOCAL_MODULE_SUFFIX := .a
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE_CLASS := STATIC_LIBRARIES
+LOCAL_SRC_FILES_arm := lib/$(LOCAL_MODULE).a
+LOCAL_MODULE_TAGS := optional
+include $(BUILD_PREBUILT)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libvmx_dvb
@@ -34,9 +55,7 @@ LOCAL_C_INCLUDES := \
 
 LOCAL_SHARED_LIBRARIES += liblog \
   libcutils \
-  libutils \
-  libsecmem_sys \
-  libteec_sys
+  libutils
 
 LOCAL_STATIC_LIBRARIES += libvmx_ree_dual_aml \
   liblinuxdvb_port \
@@ -51,7 +70,9 @@ ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 30&& echo OK),OK)
     LOCAL_PROPRIETARY_MODULE := true
     LOCAL_SHARED_LIBRARIES += libsecmem libteec
 else
+    LOCAL_PRODUCT_MODULE := true
     LOCAL_SHARED_LIBRARIES += libsecmem_sys libteec_sys
 endif
 
-#include $(BUILD_SHARED_LIBRARY)
+include $(BUILD_SHARED_LIBRARY)
+endif
