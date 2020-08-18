@@ -15,7 +15,7 @@
  *
  * For Live:
  * \code
- *   cas_hal_test <fend_dev_no> <prog_index>
+ *   cas_hal_test live <fend_dev_no> <prog_index> <freqM>
  * \endcode
  * For playback:
  * \code
@@ -111,7 +111,7 @@ static CasHandle g_cas_handle = 0;
 static CasTestSession play;
 static CasTestSession recorder;
 
-static int fend_lock(int dev_no)
+static int fend_lock(int dev_no, int freqM)
 {
     int ret;
     int fend_id;
@@ -125,7 +125,7 @@ static int fend_lock(int dev_no)
 
     memset(&delivery, 0, sizeof(delivery));
     delivery.device_type = DMD_CABLE;
-    delivery.delivery.cable.frequency = 666000;
+    delivery.delivery.cable.frequency = freqM*1000;
     delivery.delivery.cable.symbol_rate = 6875;
     delivery.delivery.cable.modulation = DMD_MOD_64QAM;
     ret = dmd_lock_c(fend_id, &delivery);
@@ -885,7 +885,7 @@ static void usage(int argc, char *argv[])
 {
     UNUSED(argc);
 
-    INF("Usage: live      : %s live <fend_dev_no> <prog_idx>>\n", argv[0]);
+    INF("Usage: live      : %s live <fend_dev_no> <prog_idx> <freqM>\n", argv[0]);
     INF("Usage: playback  : %s dvrplay <tsfile> <scramble_flag>\n", argv[0]);
 }
 
@@ -912,6 +912,7 @@ int main(int argc, char *argv[])
     int fend_dev_no = 0;
     int prog_idx = 0;
     int scrambled = 1;
+    int freqM = 474;
     dvb_service_info_t *prog = NULL;
 
     if (argc < 3) {
@@ -930,6 +931,9 @@ int main(int argc, char *argv[])
         if (argc > 3) {
             sscanf(argv[3], "%d", &prog_idx);
         }
+	if (argc > 4) {
+	    sscanf(argv[4], "%d", &freqM);
+	}
     } else if (strcmp(argv[1], "dvrrecord") == 0) {
         strcpy(&tspath[0], argv[2]);
         mode = RECORDING;
@@ -949,7 +953,7 @@ int main(int argc, char *argv[])
     dvb_init();
 
     if (is_live(mode)) {
-        fend_lock(fend_dev_no);
+        fend_lock(fend_dev_no, freqM);
 
 	dvb_set_demux_source(DMX_DEV_NO, DVB_DEMUX_SOURCE_TS0);
 
