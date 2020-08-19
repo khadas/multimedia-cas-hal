@@ -96,6 +96,12 @@ typedef struct {
     size_t           size; /**< Size of the buffer.*/ 
 } CA_DVR_Buffer_t; 
 
+/**\brief ca dvr pre information*/
+typedef struct {
+  uint8_t dmx_dev;      /**< The demux device's index.*/
+} AM_CA_PreParam_t;
+
+
 /**\brief Service descrambling information*/
 typedef struct {
 	uint16_t service_id;  /**< The service's index.*/
@@ -224,6 +230,10 @@ AM_RESULT AM_CA_UpdateDescramblingPid(CasSession session, uint16_t oldStreamPid,
  */
 AM_RESULT AM_CA_SetEmmPid(CasHandle handle, int dmx_dev, uint16_t emmPid);
 
+
+AM_RESULT AM_CA_DVRSetPreParam(CasSession session, AM_CA_PreParam_t *param);
+
+
 /**\brief Start DVR for the specified session of the CA system
  * \param[in] session The opened session
  * \param[in] serviceInfo The service information for recording
@@ -277,14 +287,14 @@ AM_RESULT AM_CA_DVRStopReplay(CasSession session);
  * \retval SecMemHandle On success
  * \return NULL On error
  */
-SecMemHandle AM_CA_CreateSecmem(CA_SERVICE_TYPE_t type, void **pSecbuf, uint32_t *size);
+SecMemHandle AM_CA_CreateSecmem(CasSession session, CA_SERVICE_TYPE_t type, void **pSecbuf, uint32_t *size);
 
 /**\brief Destroy Secmem
  * \param[in] handle The SecMem handle
  * \retval AM_SUCCESS On success
  * \return Error code
  */
-AM_RESULT AM_CA_DestroySecmem(SecMemHandle handle);
+AM_RESULT AM_CA_DestroySecmem(CasSession session, SecMemHandle handle);
 
 /**\brief Register event callback
  * \param handle event_fn
