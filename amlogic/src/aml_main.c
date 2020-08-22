@@ -146,7 +146,9 @@ static int aml_stop_descrambling(CasSession session)
     AML_PrivateInfo_t *aml_priv_info = ((CAS_SessionInfo_t *)session)->private_data;
 
     for (i = 0; i < aml_priv_info->dsc_chan_count; i++) {
+	CA_DEBUG(0, "free ca_index[%d]", aml_priv_info->dsc_chan_handle[i]);
 	ca_free_chan(aml_priv_info->dmx_dev, aml_priv_info->dsc_chan_handle[i]);
+	CA_DEBUG(0, "free key_index[%d] and key_index[%d]", i, MAX_CHAN_COUNT + i);
 	key_free(g_keyfd, aml_priv_info->key_index[i]);
 	key_free(g_keyfd, aml_priv_info->key_index[MAX_CHAN_COUNT + i]);
     }
