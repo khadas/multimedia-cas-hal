@@ -22,7 +22,9 @@ LOCAL_ARM_MODE := arm
 LOCAL_SRC_FILES := \
     src/am_dmx.c \
     src/am_smc.c \
-    src/aml.c
+    src/aml.c \
+    src/am_ca.c \
+    src/am_key.c
 
 LOCAL_C_INCLUDES := \
 		$(LOCAL_PATH) \
