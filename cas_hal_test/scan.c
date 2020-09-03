@@ -250,7 +250,9 @@ static int parse_pmt_section( const uint8_t *data, void *user_data )
 
         case 0x6:
             CA_DEBUG( 1, "!!! private pes desc, todo... !!!" );
-            //type = TYPE_AUDIO;
+            //p_dvb_info[index].i_aformat = AV_AUDIO_CODEC_HEAAC;
+            p_dvb_info[index].i_audio_pid = pid;
+            type = TYPE_AUDIO;
             break;
         }
         parse_ca_descriptor( p+5, &p_dvb_info, es_info_len, index, type );
