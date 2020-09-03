@@ -20,5 +20,9 @@ LOCAL_STRIP_MODULE := false
 
 LOCAL_CFLAGS += -O0 -DANDROID
 
+ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 30&& echo OK),OK)
+    LOCAL_PROPRIETARY_MODULE := true
+endif
+
 include $(BUILD_SHARED_LIBRARY)
 
