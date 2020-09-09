@@ -1159,3 +1159,12 @@ static int get_service_handle_id(CasSession session)
     return -1;
 }
 /****zyl***/
+
+void AM_APP_NotifyCat(void)
+{
+	if (g_global_section.pCatBuffer != NULL)
+	{
+		CA_DEBUG(0, "%s notify cat!", __FUNCTION__);
+		ird_process_cat(g_svc_idx[g_global_service_idx].service_handle_id, g_global_section.pCatBuffer, g_global_section.nCatLength);
+	}
+}
