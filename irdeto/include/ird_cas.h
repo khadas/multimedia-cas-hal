@@ -144,6 +144,9 @@ typedef enum
 	APP_ATTRIBUTE_DISPLAY,
 	APP_FINGER_PRINT,
 	APP_PVR_MSG,
+	APP_FSU_INFORM,
+	APP_FSU_TUNE,
+	APP_FSU_RESULT
 } App_Msg_Type;
 
 typedef enum
@@ -358,6 +361,22 @@ typedef struct _service_monitor_list
 	char		**monitorStr;
 } service_monitor_list_st;
 
+typedef struct _fsu_inform_user
+{
+    int  forcedUpdate;
+    uint32_t durationBeforeTuningInSeconds;
+    uint32_t durationStayOnInSeconds;
+    uint32_t repetitionRateInSeconds;
+	uint32_t caSystemID;
+} fsu_inform_user_st;
+
+typedef struct _fsu_dvb_tuned_info
+{
+	uint32_t caSystemID;
+    uint16_t serviceID;
+    uint16_t transportID;
+    uint16_t networkID;
+}fsu_dvb_tuned_info_st;
 
 Ird_status_t AM_APP_GetAllService(service_type_st *stAllService);
 Ird_status_t AM_APP_GetServiceStatus(uint32_t serviceHandle,  service_status_st *pService);
@@ -375,5 +394,6 @@ Ird_status_t AM_APP_MailFree(mail_detail_st **ppMailDetail);
 Ird_status_t AM_APP_MailDeleteByIndex(int index);
 Ird_status_t AM_APP_MailDeleteAll();
 Ird_status_t AM_APP_MailSetReadFlag(int index);
-
+Ird_status_t AM_APP_ConfigClientForFsu(uint32_t caSystemId);
+void AM_APP_NotifyCat(void);
 #endif // IRD_CAS_H

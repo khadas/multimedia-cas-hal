@@ -219,6 +219,61 @@ static void _struct_to_json(App_Msg_Type msg_type, void *p_data_structure, char 
 			cJSON_Delete(root);
 			break;
 		}
+
+		case APP_FSU_INFORM:
+		{
+			fsu_inform_user_st *pfsuInform = (fsu_inform_user_st*)p_data_structure;
+			cJSON *root = cJSON_CreateObject();
+
+			cJSON_AddItemToObject(root, "cas_system", cJSON_CreateString(CAS_SYSTEM));
+			cJSON_AddItemToObject(root, "msg_type", cJSON_CreateNumber(msg_type));
+			cJSON_AddItemToObject(root, "forced_update", cJSON_CreateBool(pfsuInform->forcedUpdate));
+			cJSON_AddItemToObject(root, "dur_before_Tune", cJSON_CreateNumber(pfsuInform->durationBeforeTuningInSeconds));
+			cJSON_AddItemToObject(root, "dur_stay_on", cJSON_CreateNumber(pfsuInform->durationStayOnInSeconds));
+			cJSON_AddItemToObject(root, "repetition_rate", cJSON_CreateNumber(pfsuInform->repetitionRateInSeconds));
+			cJSON_AddItemToObject(root, "ca_system_id", cJSON_CreateNumber(pfsuInform->caSystemID));
+
+			p_json = cJSON_Print(root);
+			memcpy(p_out_json, p_json, strlen(p_json));
+
+			cJSON_Delete(root);
+			break;
+		}
+
+		case APP_FSU_TUNE:
+		{
+			fsu_dvb_tuned_info_st *pfsuTuneInfo = (fsu_dvb_tuned_info_st*)p_data_structure;
+			cJSON *root = cJSON_CreateObject();
+
+			cJSON_AddItemToObject(root, "cas_system", cJSON_CreateString(CAS_SYSTEM));
+			cJSON_AddItemToObject(root, "msg_type", cJSON_CreateNumber(msg_type));
+			cJSON_AddItemToObject(root, "service_id", cJSON_CreateNumber(pfsuTuneInfo->serviceID));
+			cJSON_AddItemToObject(root, "transport_id", cJSON_CreateNumber(pfsuTuneInfo->transportID));
+			cJSON_AddItemToObject(root, "network_id", cJSON_CreateNumber(pfsuTuneInfo->networkID));
+			cJSON_AddItemToObject(root, "ca_system_id", cJSON_CreateNumber(pfsuTuneInfo->caSystemID));
+
+			p_json = cJSON_Print(root);
+			memcpy(p_out_json, p_json, strlen(p_json));
+
+			cJSON_Delete(root);
+			break;
+		}
+
+		case APP_FSU_RESULT:
+		{
+			uc_result *pfsuResult = (uc_result*)p_data_structure;
+			cJSON *root = cJSON_CreateObject();
+
+			cJSON_AddItemToObject(root, "cas_system", cJSON_CreateString(CAS_SYSTEM));
+			cJSON_AddItemToObject(root, "msg_type", cJSON_CreateNumber(msg_type));
+			cJSON_AddItemToObject(root, "result", cJSON_CreateNumber(*pfsuResult));
+
+			p_json = cJSON_Print(root);
+			memcpy(p_out_json, p_json, strlen(p_json));
+
+			cJSON_Delete(root);
+			break;
+		}
 	}
 
 #if 0
@@ -745,6 +800,68 @@ static void MyGlobalMessageProc(uc_global_message_type message,  void* lpVoid)
 			{
 				CA_DEBUG(0, "operator ID: 0x%x\n", operator_list[index]);
 			}
+            break;
+        }
+		case UC_GLOBAL_NOTIFY_FOR_FSU_ACTION:
+        {
+            uc_fsu_action_param *pFsuAction = (uc_fsu_action_param *)lpVoid;
+			char json_buffer[MAX_JSON_LENGTH] = {0};
+			App_Msg_Type efsuType;
+ 			memset(json_buffer, 0x00, sizeof(json_buffer));
+
+			CA_DEBUG(0, "FSU MESSAGE: action type = 0x%x\n", pFsuAction->actionType);
+			if (pFsuAction->actionType == UC_FSU_INFORM_USER_TO_RECEIVE_FSU_DATA)
+			{
+ 				fsu_inform_user_st fsu_nform_info;
+				uc_fsu_action_inform_user *pfsuInform = (uc_fsu_action_inform_user*)pFsuAction->pParamForAction;
+
+				CA_DEBUG(0, "FSU INFORM, forcedUpdate: %d\n", pfsuInform->forcedUpdate);
+				CA_DEBUG(0, "FSU INFORM, duration Before Tuning: %u ms\n", pfsuInform->durationBeforeTuningToFsuTransponderInSeconds);
+				CA_DEBUG(0, "FSU INFORM, duration Stay: %u ms\n", pfsuInform->durationStayOnFsuTransponderInSeconds);
+				CA_DEBUG(0, "FSU INFORM, broadcasting period: %u ms\n", pfsuInform->repetitionRateInSeconds);
+				CA_DEBUG(0, "FSU INFORM, caSystemID: 0x%x\n", pFsuAction->caSystemID);
+
+				efsuType = APP_FSU_INFORM;
+				fsu_nform_info.forcedUpdate = pfsuInform->forcedUpdate;
+				fsu_nform_info.durationBeforeTuningInSeconds = pfsuInform->durationBeforeTuningToFsuTransponderInSeconds;
+				fsu_nform_info.durationStayOnInSeconds = pfsuInform->durationStayOnFsuTransponderInSeconds;
+				fsu_nform_info.repetitionRateInSeconds = pfsuInform->repetitionRateInSeconds;
+				fsu_nform_info.caSystemID = pFsuAction->caSystemID;
+
+ 				_struct_to_json(efsuType, (void *)&fsu_nform_info, json_buffer);
+			}
+			else if (pFsuAction->actionType == UC_FSU_DISPLAY_MESSAGE_AND_TUNE)
+			{
+				fsu_dvb_tuned_info_st fsu_dvb_tuned_info;
+				uc_dvb_tuned_info *pfsuTuneInfo = (uc_dvb_tuned_info*)pFsuAction->pParamForAction;
+
+				CA_DEBUG(0, "FSU TUNE INFO, serviceID: %d\n", pfsuTuneInfo->serviceID);
+				CA_DEBUG(0, "FSU TUNE INFO, transportID: %d\n", pfsuTuneInfo->transportID);
+				CA_DEBUG(0, "FSU TUNE INFO, networkID: %d\n", pfsuTuneInfo->networkID);
+				CA_DEBUG(0, "FSU TUNE INFO, caSystemID: 0x%x\n", pFsuAction->caSystemID);
+
+				efsuType = APP_FSU_TUNE;
+				fsu_dvb_tuned_info.caSystemID = pFsuAction->caSystemID;
+				fsu_dvb_tuned_info.networkID = pfsuTuneInfo->networkID;
+				fsu_dvb_tuned_info.serviceID = pfsuTuneInfo->serviceID;
+				fsu_dvb_tuned_info.transportID = pfsuTuneInfo->transportID;
+
+				_struct_to_json(efsuType, (void *)&fsu_dvb_tuned_info, json_buffer);
+			}
+			else if (pFsuAction->actionType == UC_FSU_REPORT_RESULT_AND_TUNE_BACK)
+			{
+				uc_result *pfsuResult = (uc_result*)pFsuAction->pParamForAction;
+				efsuType = APP_FSU_RESULT;
+				CA_DEBUG(0, "FSU RESULT, Result: %d\n", *pfsuResult);
+				_struct_to_json(efsuType, pFsuAction->pParamForAction, json_buffer);
+			}
+			else
+			{
+				CA_DEBUG(0, "!!!ERROR: unknown FSU message");
+	            break;
+			}
+
+			_notify_msg_to_app(json_buffer);
             break;
         }
 
@@ -1804,3 +1921,26 @@ Ird_status_t AM_APP_MailSetReadFlag(int index)
 {
 	return ird_mail_set_read_flag(index);
 }
+
+Ird_status_t AM_APP_ConfigClientForFsu(uint32_t caSystemId)
+{
+	uc_result result = UC_ERROR_SUCCESS;
+	uc_ca_client_config configInfo;
+	uc_config_user_action_for_fsu configData;
+
+	configData.caSystemID = caSystemId;
+	configData.isTuningActionCancelled = UC_TRUE;
+	configInfo.configType = UC_CONFIG_TYPE_FOR_USER_ACTION_FOR_FSU;
+	configInfo.pConfigData = &configData;
+
+	CA_DEBUG(0, "[%s] caSystemId = 0x%x", __FUNCTION__, caSystemId);
+	result = UniversalClient_ConfigClient(&configInfo);
+	if (result != UC_ERROR_SUCCESS)
+	{
+		CA_DEBUG(0, "[%s] Config Client failed, result = 0x%x", __FUNCTION__, result);
+		return IRD_FAILURE;
+	}
+
+	return IRD_NO_ERROR;
+}
+
