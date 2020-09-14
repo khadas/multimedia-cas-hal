@@ -61,6 +61,7 @@ int loadCASLibrary(void)
             CA_DEBUG(0, "CAS library %s found", dp->d_name);
             if (!(dl_handle = dlopen(dp->d_name, RTLD_NOW | RTLD_GLOBAL))) {
                 CA_DEBUG(0, "dlopen %s failed, %s", dp->d_name, strerror(errno));
+                CA_DEBUG(0, "dlerror: %s", dlerror());
                 continue;
             }
             if (!(cas_ops = (struct AM_CA_Impl_t *)dlsym(dl_handle, "cas_ops"))) {
@@ -159,7 +160,7 @@ AM_RESULT AM_CA_Term(CasHandle handle)
  * \retval AM_SUCCESS On success
  * \return Error code
  */
-AM_RESULT AM_CA_OpenSession(CasHandle handle, CasSession* session)
+AM_RESULT AM_CA_OpenSession(CasHandle handle, CasSession* session, CA_SERVICE_TYPE_t service_type)
 {
     CAS_ASSERT(handle);
     CAS_ASSERT(session);
@@ -168,7 +169,7 @@ AM_RESULT AM_CA_OpenSession(CasHandle handle, CasSession* session)
     memset((void *)*session, 0x0, sizeof(CAS_SessionInfo_t));
     ((CAS_SessionInfo_t *)(*session))->cas_handle = (CAS_CasInfo_t *)handle;
 
-    return cas_ops->open_session(handle, *session);
+    return cas_ops->open_session(handle, *session, service_type);
 }
 
 /**\brief Close the opened descrambling session
@@ -513,6 +514,23 @@ AM_RESULT AM_CA_ReportSection(AM_CA_SecAttr_t *pAttr, uint8_t *pData, uint16_t l
 	CAS_ASSERT(pData);
 	if (cas_ops && cas_ops->report_section) {
 		return cas_ops->report_section(pAttr, pData, len);
+	}
+
+	return AM_ERROR_NOT_LOAD;
+}
+
+/**\brief get all region of store info
+ * \param[in] session The opened session
+ * \param[out] region of store info
+ * \param[out] region count
+ * \retval am_success on success
+ * \return error code
+ */
+AM_RESULT AM_CA_GetStoreRegion(CasSession session, AM_CA_StoreRegion_t *region, uint8_t *reg_cnt)
+{
+	CAS_ASSERT(region);
+	if (cas_ops && cas_ops->get_store_region) {
+		return cas_ops->get_store_region(session, region, reg_cnt);
 	}
 
 	return AM_ERROR_NOT_LOAD;

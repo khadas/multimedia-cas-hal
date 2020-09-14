@@ -111,7 +111,7 @@ static int vmx_pre_init(void);
 static int vmx_init(CasHandle handle);
 static int vmx_term(CasHandle handle);
 static int vmx_isSystemId_supported(int CA_system_id);
-static int vmx_open_session(CasHandle handle, CasSession session);
+static int vmx_open_session(CasHandle handle, CasSession session, CA_SERVICE_TYPE_t service_type);
 static int vmx_close_session(CasSession session);
 static int vmx_start_descrambling(CasSession session, AM_CA_ServiceInfo_t *serviceInfo);
 static int vmx_update_descrambling_pid(CasSession session, uint16_t oldStreamPid, uint16_t newStreamPid);
@@ -751,7 +751,7 @@ static int vmx_isSystemId_supported(int CA_system_id)
     return 1;
 }
 
-static int vmx_open_session(CasHandle handle, CasSession session)
+static int vmx_open_session(CasHandle handle, CasSession session, CA_SERVICE_TYPE_t service_type)
 {
     int ret;
     int dsc_svc_handle;

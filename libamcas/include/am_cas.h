@@ -105,6 +105,7 @@ typedef struct {
 /**\brief Service descrambling information*/
 typedef struct {
 	uint16_t service_id;  /**< The service's index.*/
+	uint8_t fend_dev;     /**< The frontend device's index*/
 	uint8_t dmx_dev;      /**< The demux device's index.*/
 	uint8_t dsc_dev;      /**< The descrmabler device's index.*/
 	uint8_t dvr_dev;      /**< The DVR device's index.*/
@@ -141,6 +142,12 @@ typedef struct AM_CA_SecAttr_s {
     uint16_t service_id;
     AM_CA_SECTION section_type;
 }AM_CA_SecAttr_t;
+
+/**\brief CAS Storeinfo region*/
+typedef struct AM_CA_Store_Region_s {
+    loff_t start;
+    loff_t end;
+}AM_CA_StoreRegion_t;
 
 /**\brief Error code of the CAS-Hal module*/
 typedef enum {
@@ -188,7 +195,7 @@ AM_RESULT AM_CA_Term(CasHandle handle);
  * \retval AM_SUCCESS On success
  * \return Error code
  */
-AM_RESULT AM_CA_OpenSession(CasHandle handle, CasSession* session);
+AM_RESULT AM_CA_OpenSession(CasHandle handle, CasSession* session, CA_SERVICE_TYPE_t type);
 
 /**\brief Close the opened descrambling session
  * \param[in] session The opened session
@@ -322,15 +329,23 @@ AM_RESULT AM_CA_Ioctl(CasSession session, const char *in_json, char *out_json, u
  */
 uint8_t AM_CA_IsNeedWholeSection(void);
 
-/**\brief Report Section
- * \param[in] pAttr The attribute of section
- * \param[in] pData The pointer of section data buffer
- * \param[in] len The length of section data
- * \retval AM_SUCCESS On success
- * \return Error code
+/**\brief report section
+ * \param[in] pattr the attribute of section
+ * \param[in] pdata the pointer of section data buffer
+ * \param[in] len the length of section data
+ * \retval am_success on success
+ * \return error code
  */
 AM_RESULT AM_CA_ReportSection(AM_CA_SecAttr_t *pAttr, uint8_t *pData, uint16_t len);
 
+/**\brief get all region of store info
+ * \param[in] session The opened session
+ * \param[out] region region of store info
+ * \param[out] reg_cnt region count
+ * \retval am_success on success
+ * \return error code
+ */
+AM_RESULT AM_CA_GetStoreRegion(CasSession session, AM_CA_StoreRegion_t *region, uint8_t *reg_cnt);
 #ifdef __cplusplus
 }
 #endif

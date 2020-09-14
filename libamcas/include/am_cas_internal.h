@@ -71,7 +71,7 @@ struct AM_CA_Impl_t
     int (*init)(CasHandle handle);
     int (*term)(CasHandle handle);
     int (*isSystemIdSupported)(int CA_system_id);
-    int (*open_session)(CasHandle handle, CasSession session);
+    int (*open_session)(CasHandle handle, CasSession session, CA_SERVICE_TYPE_t service_type);
     int (*close_session)(CasSession session);
     int (*start_descrambling)(CasSession session, AM_CA_ServiceInfo_t *service_info);
     int (*update_descrambling_pid)(CasSession session, uint16_t oldStreamPid, uint16_t newStreamPid);
@@ -93,6 +93,7 @@ struct AM_CA_Impl_t
     int (*isNeedWholeSection)(void);
     int (*report_section)(AM_CA_SecAttr_t *pAttr, uint8_t *pData, uint16_t len);
     char* (*get_version)(void);
+    int (*get_store_region)(CasSession session, AM_CA_StoreRegion_t *region, uint8_t *reg_cnt);
 };
 
 #endif

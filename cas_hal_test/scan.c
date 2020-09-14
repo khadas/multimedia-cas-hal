@@ -172,6 +172,8 @@ static int parse_pmt_section( const uint8_t *data, void *user_data )
         sec_len -= ( 5 + es_info_len );
         CA_DEBUG( 1, "es_info, strem_type:%d, pid:%#x, es_info_len:%d, sec_len:%d\n",
                   stream_type, pid, es_info_len, sec_len );
+if (p_dvb_info[index].i_video_pid == 0 ||
+	 p_dvb_info[index].i_audio_pid == 0) {
         switch ( stream_type ) {
 
         /*video pid and video format*/
@@ -255,6 +257,7 @@ static int parse_pmt_section( const uint8_t *data, void *user_data )
             type = TYPE_AUDIO;
             break;
         }
+}
         parse_ca_descriptor( p+5, &p_dvb_info, es_info_len, index, type );
         p += ( 5 + es_info_len );
     }
@@ -358,6 +361,7 @@ static int parse_ca_descriptor( uint8_t *p, dvb_service_info_t **dvb_info, uint1
                 CA_DEBUG( 1, "%s, @@this is ca_private_data, data:%#x, iv:%d, aligned:%d, mode:%d, algo:%d",
                           __FUNCTION__, p[6], has_iv, aligned, scramble_mode, algorithm );
                 if ( algorithm == 1 ) {
+		    CA_DEBUG(1, "%s, AES scrambled", __FUNCTION__);
                     p_dvb_info[index].t_scramble_info.algo = SCRAMBLE_ALGO_AES;
                     if ( scramble_mode == 0 )
                         p_dvb_info[index].t_scramble_info.mode = SCRAMBLE_MODE_ECB;
@@ -516,17 +520,23 @@ int aml_scan(void)
 
 dvb_service_info_t* aml_get_program(uint32_t prog_index)
 {
-	int i;
+    int i;
 
     for (i = 0; i < g_pmt_num; i++) {
-        printf("vpid:%d, apid:%d\r\n", g_info[i].i_video_pid, g_info[i].i_audio_pid);
+        printf("program_num:%d vpid:%d, apid:%d\r\n",
+		g_info[i].i_program_num,
+		g_info[i].i_video_pid,
+		g_info[i].i_audio_pid);
+	if (prog_index == g_info[i].i_program_num) {
+	    return &g_info[i];
+	}
     }
     printf("\r\n");
-	if (prog_index+1 > g_pmt_num) {
-		return &g_info[prog_index%g_pmt_num];
-	}
+    if (prog_index+1 > g_pmt_num) {
+	return &g_info[prog_index%g_pmt_num];
+    }
 
-	return &g_info[prog_index];
+    return &g_info[prog_index];
 }
 
 int aml_set_ca_system_id(int ca_sys_id)

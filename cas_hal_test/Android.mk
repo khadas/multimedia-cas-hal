@@ -4,6 +4,7 @@ include $(CLEAR_VARS)
 ifeq ($(SUPPORT_CAS), true)
 LOCAL_SRC_FILES:= \
 	cas_hal_test.c \
+	dvr_playback.c \
 	scan.c \
 	fend.c
 

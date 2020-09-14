@@ -78,8 +78,7 @@
 #define VMX_SYS_ID (0x1724)
 #define VMX_CAS_STRING "Verimatrix"
 
-#define DVR_BUFFER_SIZE (512*1024)
-#define RECORD_BLOCK_SIZE (256*1024)//same to asyncfifo flush size, it's enc block size and dec block size//65424
+#define RECORD_BLOCK_SIZE (188*1024)//same to asyncfifo flush size, it's enc block size and dec block size//65424
 
 #define DVR_STREAM_TYPE_TO_TYPE(_t) (((_t) >> 24) & 0xF)
 #define DVR_STREAM_TYPE_TO_FMT(_t)  ((_t) & 0xFFFFFF)
@@ -92,6 +91,14 @@
 #define is_live_local(_m_)   ((_m_) == LIVE_LOCAL)
 #define is_playback(_m_)     ((_m_) == PLAYBACK)
 #define is_timeshifting(_m_) ((_m_) == TIMESHIFTING)
+#define is_ext_playback(_m_)     ((_m_) == EXT_PLAYBACK)
+
+struct vm_config_t {
+    uint8_t run;
+    uint8_t on;
+    uint8_t config;
+    uint8_t strength;
+} g_vm_config = {0};
 
 typedef struct
 {
@@ -99,12 +106,21 @@ typedef struct
     SecMemHandle secmem_session;
     void *dvr_session; //'DVR_WrapperPlayback_t *' or 'DVR_WrapperRecord_t *'
     am_tsplayer_handle player_session;
+    int replayed;
 } CasTestSession;
+
+typedef enum {
+    PIN_NEED_CHECK,
+    PIN_CHECK_SUCCESS,
+    PIN_CHECK_FAILED,
+    PIN_MAX,
+} PIN_STATUS;
 
 static int mode = 0;
 static int duration=180000;
 static int size=1024*1024*1024;
 static char *pfilename = "/data/data/timeshifting.ts";
+static int check_pin_status = PIN_MAX;
 
 enum {
     LIVE        = 0x01,
@@ -112,14 +128,21 @@ enum {
     PLAYBACK    = 0x04,
     RECORDING   = 0x08,
     TIMESHIFTING = PLAYBACK | RECORDING | 0x10,
+    EXT_PLAYBACK = PLAYBACK | 0x10,
 };
 
 static CasHandle g_cas_handle = 0;
 static CasTestSession play;
 static CasTestSession recorder;
 static pthread_t gInjectThread;
+static int running = 1;
 static int gInjectRunning = 0;
 
+static int watermark_test_config(
+	uint8_t on,
+	uint8_t config,
+	uint8_t strength);
+static AM_RESULT cas_event_cb(CasSession session, char *json);
 static void video_callback(void *user_data, am_tsplayer_event *event);
 
 static int fend_lock(int dev_no, int freqM)
@@ -137,8 +160,8 @@ static int fend_lock(int dev_no, int freqM)
     memset(&delivery, 0, sizeof(delivery));
     delivery.device_type = DMD_CABLE;
     delivery.delivery.cable.frequency = freqM*1000;
-    delivery.delivery.cable.symbol_rate = 6875;
-    delivery.delivery.cable.modulation = DMD_MOD_64QAM;
+    delivery.delivery.cable.symbol_rate = 5217;
+    delivery.delivery.cable.modulation = DMD_MOD_128QAM;
     ret = dmd_lock_c(fend_id, &delivery);
 
     INF("DVB-C: lock to freq:%d, modulation:%d symbol_rate:%d ret:%d \n",
@@ -176,11 +199,13 @@ int init_tsplayer_inject(dvb_service_info_t *prog)
     ret = AmTsPlayer_create(parm, &session);
     ret |= AmTsPlayer_setWorkMode(session, TS_PLAYER_MODE_NORMAL);
     ret |= AmTsPlayer_registerCb(session, video_callback, NULL);
-    
+
     vparam.codectype = prog->i_vformat;
 
     vparam.pid = prog->i_video_pid;
     ret |= AmTsPlayer_setVideoParams(session, &vparam);
+
+    memset(&aparam, 0, sizeof(aparam));
     aparam.codectype = prog->i_aformat;
     aparam.pid = prog->i_audio_pid;
     ret |= AmTsPlayer_setAudioParams(session, &aparam);
@@ -248,6 +273,7 @@ static int dvb_init(void)
     int ret;
 
     ret = AM_CA_Init(&g_cas_handle);
+    ret |= AM_CA_RegisterEventCallback((CasSession)NULL, cas_event_cb);
     INF("CAS init ret = %d\r\n", ret);
 
     return 0;
@@ -255,7 +281,50 @@ static int dvb_init(void)
 
 static AM_RESULT cas_event_cb(CasSession session, char *json)
 {
-    CA_DEBUG(0, "%s:\n%s", __func__, json);
+    cJSON* cas;
+    cJSON* input;
+    cJSON* type;
+    cJSON* state;
+
+    INF("%s:%s\n", __func__, json);
+    input = cJSON_Parse(json);
+    if (input == NULL) {
+	return -1;
+    }
+    cas = cJSON_GetObjectItemCaseSensitive(input, ITEM_CAS);
+    if (!cJSON_IsString(cas) || (strcmp(cas->valuestring, VMX_CAS_STRING))) {
+	INF("%s, not Vermatrix cas cmd\n", __func__);
+	goto end;
+    }
+    type = cJSON_GetObjectItemCaseSensitive(input, ITEM_TYPE);
+    if (!cJSON_IsString(type) || !type->valuestring) {
+	INF("%s invalid cmd\n", __func__);
+	goto end;
+    }
+    if (!strcmp(type->valuestring, ITEM_CHECK_PIN)) {
+	check_pin_status = PIN_NEED_CHECK;
+	INF("notify pin check status -> PIN_NEED_CHECK \n");
+    } else if (!strcmp(type->valuestring, ITEM_PIN_STATE)) {
+	state = cJSON_GetObjectItemCaseSensitive(input, ITEM_ERROR_CODE);
+	if (!cJSON_IsNumber(state)) {
+	    INF("%s invalid state type\n", __func__);
+	    goto end;
+	}
+	if (state) {
+	    check_pin_status = PIN_CHECK_SUCCESS;
+	    INF("notify pin check status -> PIN_NEED_SUCCESS\n");
+	} else {
+	    check_pin_status = PIN_CHECK_FAILED;
+	    INF("notify pin check status -> PIND_NEED_FAILED");
+	}
+    }
+    return 0;
+
+end:
+    if (input) {
+	cJSON_Delete(input);
+    }
+
     return 0;
 }
 
@@ -279,7 +348,9 @@ static DVR_Result_t encrypt_callback(DVR_CryptoParams_t *params, void *userdata)
         return -1;
     }
 
-    INF("%#x bytes encrypted\n", cryptoPara->buf_len);
+    if (cryptoPara->buf_len) {
+	INF("%#x bytes encrypted\n", cryptoPara->buf_len);
+    }
 
     return 0;
 }
@@ -287,17 +358,23 @@ static DVR_Result_t encrypt_callback(DVR_CryptoParams_t *params, void *userdata)
 static DVR_Result_t decrypt_callback(DVR_CryptoParams_t *params, void *userdata)
 {
     int ret;
+    CA_SERVICE_TYPE_t service_type = SERVICE_PVR_PLAY;
     UNUSED(userdata);
 
     AM_CA_CryptoPara_t *cryptoPara = (AM_CA_CryptoPara_t *)params;
 
-    if (!play.cas_session) {
-        ret = AM_CA_OpenSession(g_cas_handle, &play.cas_session);
-        ret |= AM_CA_DVRReplay(play.cas_session, cryptoPara);
-        INF("%s open cas session:%#x, start cas replay. ret:%d\n",
-            __func__, play.cas_session, ret);
+    if (!play.replayed) {
+	ret = AM_CA_DVRReplay(play.cas_session, cryptoPara);
+	play.replayed = 1;
+	if (check_pin_status == PIN_NEED_CHECK) {
+	    do {
+		//INF("wait state %d\n", check_pin_status);
+		usleep(200*1000);
+	    } while (check_pin_status != PIN_CHECK_SUCCESS &&
+		     running);
+	    AM_CA_DVRReplay(play.cas_session, cryptoPara);
+	}
     }
-
     ret = AM_CA_DVRDecrypt(play.cas_session, cryptoPara);
     if (ret) {
         cryptoPara->buf_len = 0;
@@ -306,7 +383,9 @@ static DVR_Result_t decrypt_callback(DVR_CryptoParams_t *params, void *userdata)
         return -1;
     }
 
-    INF("%#x bytes decrypted\n", cryptoPara->buf_len);
+    if (cryptoPara->buf_len) {
+	//INF("%#x bytes decrypted\n", cryptoPara->buf_len);
+    }
 
     return 0;
 }
@@ -461,16 +540,17 @@ static int start_descrambling(dvb_service_info_t *prog)
 {
     int ret;
     AM_CA_ServiceInfo_t cas_para;
+    CA_SERVICE_TYPE_t service_type = SERVICE_LIVE_PLAY;
 
-    //if (!prog->scrambled)
-	//return 0;
+    if (!prog->scrambled)
+	return 0;
 
     ret = AM_CA_SetEmmPid(g_cas_handle, DMX_DEV_NO, prog->i_ca_pid);
     if (ret) {
         ERR("CAS set emm PID failed. ret = %d\r\n", ret);
     }
 
-    ret = AM_CA_OpenSession(g_cas_handle, &play.cas_session);
+    ret = AM_CA_OpenSession(g_cas_handle, &play.cas_session, service_type);
     if (ret) {
         ERR("CAS open session failed. ret = %d\r\n", ret);
         return -1;
@@ -482,7 +562,13 @@ static int start_descrambling(dvb_service_info_t *prog)
     }
 
     memset(&cas_para, 0x0, sizeof(AM_CA_ServiceInfo_t));
-    cas_para.service_id = prog->i_service_num;
+    //if (prog->t_scramble_info.algo == SCRAMBLE_ALGO_AES) {
+    if (prog->i_program_num == 1062) {
+	cas_para.service_mode = SERVICE_IPTV;
+	INF("IPTV service mode:%d\n", cas_para.service_mode);
+    }
+
+    cas_para.service_id = prog->i_program_num;
     cas_para.service_type = SERVICE_LIVE_PLAY;
     cas_para.ecm_pid = prog->i_ecm_pid[0];
     cas_para.stream_pids[0] = prog->i_video_pid;
@@ -521,13 +607,12 @@ static int start_liveplay(dvb_service_info_t *prog)
     param.dmx_dev_id = DMX_DEV_NO;
     if (prog->scrambled) {
         param.drmmode = TS_INPUT_BUFFER_TYPE_TVP;
+	INF("enalbe live TVP\n");
     }
 
     if (param.drmmode != TS_INPUT_BUFFER_TYPE_NORMAL) {
-        play.secmem_session = AM_CA_CreateSecmem(SERVICE_LIVE_PLAY, NULL, NULL);
-        if (!play.secmem_session) {
-            CA_DEBUG(0, "Create live secmem failed!!!!");
-            return -1;
+	if (play.cas_session) {
+		play.secmem_session = AM_CA_CreateSecmem(play.cas_session, SERVICE_LIVE_PLAY, NULL, NULL);
         }
     }
 
@@ -549,6 +634,7 @@ static int start_liveplay(dvb_service_info_t *prog)
     AmTsPlayer_setVideoParams(player_session, &vparam);
     AmTsPlayer_startVideoDecoding(player_session);
 
+    memset(&aparam, 0, sizeof(aparam));
     aparam.codectype = prog->i_aformat;
     aparam.pid = prog->i_audio_pid;
     AmTsPlayer_setAudioParams(player_session, &aparam);
@@ -585,6 +671,7 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
     int error;
 
     AM_CA_ServiceInfo_t cas_para;
+    CA_SERVICE_TYPE_t service_type = SERVICE_PVR_RECORDING;
 
     UNUSED(dev_no);
     DVR_WrapperRecord_t recorder_session;
@@ -633,7 +720,23 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
         uint32_t secmem_size = 0;
         SecMemHandle secmem_session;
 
-        secmem_session = AM_CA_CreateSecmem(SERVICE_PVR_RECORDING, &buf, &secmem_size);
+        error = AM_CA_OpenSession(g_cas_handle, &recorder.cas_session, service_type);
+        if (error) {
+            ERR("CAS open session failed. ret = %d\r\n", error);
+            dvr_wrapper_close_record(recorder_session);
+            return -1;
+        }
+
+			    if (g_vm_config.run) {
+				watermark_test_config(g_vm_config.on,
+						      g_vm_config.config,
+						      g_vm_config.strength);
+			    }
+        secmem_session = AM_CA_CreateSecmem(
+			recorder.cas_session,
+			SERVICE_PVR_RECORDING,
+			&buf,
+			&secmem_size);
         if (!secmem_session) {
             ERR("create dvr recording secmem failed\n");
             dvr_wrapper_close_record(recorder_session);
@@ -645,7 +748,7 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
         error = dvr_wrapper_set_record_secure_buffer(recorder_session, buf, secmem_size);
         if (error) {
             dvr_wrapper_close_record(recorder_session);
-            AM_CA_DestroySecmem(secmem_session);
+            AM_CA_DestroySecmem(recorder.cas_session, secmem_session);
             recorder.secmem_session = (SecMemHandle)NULL;
             return -1;
         }
@@ -656,18 +759,16 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
             return -1;
         }
 
-        error = AM_CA_OpenSession(g_cas_handle, &recorder.cas_session);
-        if (error) {
-            ERR("CAS open session failed. ret = %d\r\n", error);
-            return -1;
-        }
-
         memset(&cas_para, 0x0, sizeof(AM_CA_ServiceInfo_t));
         if (is_timeshifting(mode)) {
             cas_para.dmx_dev = DMX_DEV_NO_3RD;
         } else {
             cas_para.dmx_dev = DMX_DEV_NO;
         }
+	if (prog->i_program_num == 1062) {
+	    cas_para.service_mode = SERVICE_IPTV;
+	    INF("IPTV service mode:%d\n", cas_para.service_mode);
+	}
         cas_para.service_id = prog->i_service_num;
         cas_para.service_type = SERVICE_PVR_RECORDING;
         cas_para.ecm_pid = prog->i_ecm_pid[0];
@@ -694,7 +795,7 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
     {
       ERR( "recorder start fail = (0x%x)\n", error);
       dvr_wrapper_close_record(recorder_session);
-      AM_CA_DestroySecmem(recorder.secmem_session);
+      AM_CA_DestroySecmem(recorder.cas_session, recorder.secmem_session);
       recorder.secmem_session = (SecMemHandle)NULL;
       return -1;
     }
@@ -705,23 +806,228 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
 static int show_cardno(void)
 {
     const cJSON *input = NULL;
-    const cJSON *output = NULL;
-    const cJSON *cas = NULL;
-    const cJSON *cmd = NULL;
-    const cJSON *type = NULL;
+    const cJSON *item = NULL;
     char in_json[MAX_JSON_LEN];
     char out_json[MAX_JSON_LEN];
 
     input = cJSON_CreateObject();
-    cas = cJSON_CreateString(VMX_CAS_STRING);
-    cJSON_AddItemToObject(input, ITEM_CAS, cas);
-    cmd = cJSON_CreateString(ITEM_GETSCNO);
-    cJSON_AddItemToObject(input, ITEM_CMD, cmd);
+    item = cJSON_CreateString(VMX_CAS_STRING);
+    cJSON_AddItemToObject(input, ITEM_CAS, item);
+    item = cJSON_CreateString(ITEM_GETSCNO);
+    cJSON_AddItemToObject(input, ITEM_CMD, item);
     cJSON_PrintPreallocated(input, in_json, MAX_JSON_LEN, 1);
     INF( "in_json:\n%s\n", in_json);
-    if (play.cas_session) { 
+    if (play.cas_session) {
 	AM_CA_Ioctl(play.cas_session, in_json, out_json, MAX_JSON_LEN);
 	INF( "out_json:\n%s\n", out_json);
+    }
+
+    return 0;
+}
+
+static int check_pin(char *pin, uint8_t pinIndex, uint8_t reason)
+{
+    const cJSON *input = NULL;
+    const cJSON *item = NULL;
+    char in_json[MAX_JSON_LEN];
+    char out_json[MAX_JSON_LEN];
+
+    input = cJSON_CreateObject();
+    item = cJSON_CreateString(VMX_CAS_STRING);
+    cJSON_AddItemToObject(input, ITEM_CAS, item);
+    item = cJSON_CreateString(ITEM_CHECK_PIN);
+    cJSON_AddItemToObject(input, ITEM_CMD, item);
+    item = cJSON_CreateString(pin);
+    cJSON_AddItemToObject(input, ITEM_PIN, item);
+    item = cJSON_CreateNumber(pinIndex);
+    cJSON_AddItemToObject(input, ITEM_PIN_INDEX, item);
+    item = cJSON_CreateNumber(reason);
+    cJSON_AddItemToObject(input, ITEM_REASON, item);
+
+    cJSON_PrintPreallocated(input, in_json, MAX_JSON_LEN, 1);
+    INF("in_json:\n%s\n", in_json);
+    if (play.cas_session) {
+	AM_CA_Ioctl(play.cas_session, in_json, out_json, MAX_JSON_LEN);
+	INF("out_json:\n%s\n", out_json);
+    }
+
+    return 0;
+}
+
+static int dvr_test_config(uint8_t algo)
+{
+    const cJSON *input = NULL;
+    const cJSON *item = NULL;
+    char in_json[MAX_JSON_LEN];
+    char out_json[MAX_JSON_LEN];
+
+    input = cJSON_CreateObject();
+    item = cJSON_CreateString(VMX_CAS_STRING);
+    cJSON_AddItemToObject(input, ITEM_CAS, item);
+    item = cJSON_CreateString(ITEM_SET_ALGO);
+    cJSON_AddItemToObject(input, ITEM_CMD, item);
+    item = cJSON_CreateNumber(algo);
+    cJSON_AddItemToObject(input, ITEM_ALGO, item);
+
+    cJSON_PrintPreallocated(input, in_json, MAX_JSON_LEN, 1);
+    printf("in_json:\n%s\n", in_json);
+    if (has_recording(mode)) {
+	AM_CA_Ioctl(recorder.cas_session, in_json, out_json, MAX_JSON_LEN);
+	INF("out_json:\n%s\n", out_json);
+    }
+
+    return 0;
+}
+
+static int watermark_test_config(
+	uint8_t on,
+	uint8_t config,
+	uint8_t strength)
+{
+    const cJSON *input = NULL;
+    const cJSON *item = NULL;
+    char in_json[MAX_JSON_LEN];
+    char out_json[MAX_JSON_LEN];
+
+    input = cJSON_CreateObject();
+    item = cJSON_CreateString(VMX_CAS_STRING);
+    cJSON_AddItemToObject(input, ITEM_CAS, item);
+    item = cJSON_CreateString(ITEM_WATERMARK);
+    cJSON_AddItemToObject(input, ITEM_CMD, item);
+    item = cJSON_CreateNumber(on);
+    cJSON_AddItemToObject(input, ITEM_ON, item);
+    item = cJSON_CreateNumber(config);
+    cJSON_AddItemToObject(input, ITEM_CONFIG, item);
+    item = cJSON_CreateNumber(strength);
+    cJSON_AddItemToObject(input, ITEM_STRENGTH, item);
+
+    cJSON_PrintPreallocated(input, in_json, MAX_JSON_LEN, 1);
+    INF("in_json:\n%s\n", in_json);
+    if (has_live(mode) && play.cas_session) {
+	INF("has live\n");
+	AM_CA_Ioctl(play.cas_session, in_json, out_json, MAX_JSON_LEN);
+    }
+    if (recorder.cas_session) {
+	INF("has recording\n");
+	AM_CA_Ioctl(recorder.cas_session, in_json, out_json, MAX_JSON_LEN);
+    }
+    INF("out_json:\n%s\n", out_json);
+
+    return 0;
+}
+
+static int output_control_test_config(
+	uint32_t flag,
+	uint8_t analog,
+	uint8_t cgmsa,
+	uint8_t emicci)
+{
+    const cJSON *input = NULL;
+    const cJSON *item = NULL;
+    char in_json[MAX_JSON_LEN];
+    char out_json[MAX_JSON_LEN];
+
+    input = cJSON_CreateObject();
+    item = cJSON_CreateString(VMX_CAS_STRING);
+    cJSON_AddItemToObject(input, ITEM_CAS, item);
+    item = cJSON_CreateString(ITEM_OUTPUT_CONTROL);
+    cJSON_AddItemToObject(input, ITEM_CMD, item);
+    item = cJSON_CreateNumber(flag);
+    cJSON_AddItemToObject(input, ITEM_FLAG, item);
+    item = cJSON_CreateNumber(analog);
+    cJSON_AddItemToObject(input, ITEM_ANALOG, item);
+    item = cJSON_CreateNumber(cgmsa);
+    cJSON_AddItemToObject(input, ITEM_CGMSA, item);
+    item = cJSON_CreateNumber(emicci);
+    cJSON_AddItemToObject(input, ITEM_EMICCI, item);
+
+    cJSON_PrintPreallocated(input, in_json, MAX_JSON_LEN, 1);
+    INF("in_json:\n%s\n", in_json);
+    if (has_live(mode) && play.cas_session) {
+	AM_CA_Ioctl(play.cas_session, in_json, out_json, MAX_JSON_LEN);
+    }
+    INF("out_json:\n%s\n", out_json);
+
+    return 0;
+}
+
+static int svp_test_config(size_t addr)
+{
+    const cJSON *input = NULL;
+    const cJSON *item = NULL;
+    char in_json[MAX_JSON_LEN];
+    char out_json[MAX_JSON_LEN];
+
+    input = cJSON_CreateObject();
+    item = cJSON_CreateString(VMX_CAS_STRING);
+    cJSON_AddItemToObject(input, ITEM_CAS, item);
+    item = cJSON_CreateString(ITEM_SVP);
+    cJSON_AddItemToObject(input, ITEM_CMD, item);
+    item = cJSON_CreateNumber(addr);
+    cJSON_AddItemToObject(input, ITEM_ADDR, item);
+
+    cJSON_PrintPreallocated(input, in_json, MAX_JSON_LEN, 1);
+    INF("in_json:\n%s\n", in_json);
+    if (has_live(mode)) {
+	AM_CA_Ioctl(play.cas_session, in_json, out_json, MAX_JSON_LEN);
+	INF("out_json:\n%s\n", out_json);
+    }
+
+    return 0;
+}
+
+static int antirollback_test_config(uint8_t flag)
+{
+    const cJSON *input = NULL;
+    const cJSON *item = NULL;
+    char in_json[MAX_JSON_LEN];
+    char out_json[MAX_JSON_LEN];
+
+    input = cJSON_CreateObject();
+    item = cJSON_CreateString(VMX_CAS_STRING);
+    cJSON_AddItemToObject(input, ITEM_CAS, item);
+    item = cJSON_CreateString(ITEM_ARB);
+    cJSON_AddItemToObject(input, ITEM_CMD, item);
+    item = cJSON_CreateNumber(flag);
+    cJSON_AddItemToObject(input, ITEM_FLAG, item);
+
+    cJSON_PrintPreallocated(input, in_json, MAX_JSON_LEN, 1);
+    INF("in_json:\n%s\n", in_json);
+    if (has_live(mode)) {
+	AM_CA_Ioctl(play.cas_session, in_json, out_json, MAX_JSON_LEN);
+	INF("out_json:\n%s\n", out_json);
+    }
+
+    return 0;
+}
+
+static int ta2ta_test_config(
+	uint32_t clientid,
+	uint8_t *data,
+	uint32_t len)
+{
+    const cJSON *input = NULL;
+    const cJSON *item = NULL;
+    char in_json[MAX_JSON_LEN];
+    char out_json[MAX_JSON_LEN];
+
+    input = cJSON_CreateObject();
+    item = cJSON_CreateString(VMX_CAS_STRING);
+    cJSON_AddItemToObject(input, ITEM_CAS, item);
+    item = cJSON_CreateString(ITEM_TA2TA);
+    cJSON_AddItemToObject(input, ITEM_CMD, item);
+    item = cJSON_CreateNumber(clientid);
+    cJSON_AddItemToObject(input, ITEM_CLIENTID, item);
+    item = cJSON_CreateString(data);
+    cJSON_AddItemToObject(input, ITEM_DATA, item);
+    item = cJSON_CreateNumber(len);
+    cJSON_AddItemToObject(input, ITEM_LEN, item);
+
+    cJSON_PrintPreallocated(input, in_json, MAX_JSON_LEN, 1);
+    INF("in_json:\n%s\n", in_json);
+    if (has_live(mode)) {
+	AM_CA_Ioctl(play.cas_session, in_json, out_json, MAX_JSON_LEN);
+	INF("out_json:\n%s\n", out_json);
     }
 
     return 0;
@@ -743,12 +1049,12 @@ static int stop_recording(int dev_no)
 
     if (cas_session) {
         AM_CA_DVRStop(cas_session);
-        AM_CA_CloseSession(cas_session);
-        ret = AM_CA_DestroySecmem(recorder.secmem_session);
+        ret = AM_CA_DestroySecmem(cas_session, recorder.secmem_session);
         if (ret) {
             ERR("destroy secmem failed:%d", ret);
             return -1;
         }
+        AM_CA_CloseSession(cas_session);
     }
 
     memset(&recorder, 0, sizeof(CasTestSession));
@@ -866,10 +1172,10 @@ static int start_playback(void *params, int scrambled, int pause)
 
     switch (afmt) {
             case AV_AUDIO_CODEC_MP3:
-                vfmt = DVR_AUDIO_FORMAT_MPEG;
+                afmt = DVR_AUDIO_FORMAT_MPEG;
                 break;
             case AV_AUDIO_CODEC_AAC:
-                vfmt = DVR_AUDIO_FORMAT_AAC;
+                afmt = DVR_AUDIO_FORMAT_AAC;
                 break;
             default:
                 break;
@@ -930,6 +1236,7 @@ static int start_playback(void *params, int scrambled, int pause)
        play.player_session = tsplayer_handle;
     }
 
+    play.replayed = 0;
     if (scrambled) {
         play_params.crypto_fn = decrypt_callback;
         play_params.crypto_data = NULL;
@@ -945,8 +1252,22 @@ static int start_playback(void *params, int scrambled, int pause)
        if (scrambled) {
            void *sec_buf;
            uint32_t sec_buf_size = 0;
+	   CA_SERVICE_TYPE_t service_type = SERVICE_PVR_PLAY;
 
-           play.secmem_session = AM_CA_CreateSecmem(SERVICE_PVR_PLAY, &sec_buf, &sec_buf_size);
+	   error = AM_CA_OpenSession(
+			g_cas_handle,
+			&play.cas_session,
+			service_type);
+	   INF("%s open cas session:%#x, start cas\n",
+		__func__, play.cas_session);
+
+	   AM_CA_RegisterEventCallback(play.cas_session, cas_event_cb);
+
+           play.secmem_session = AM_CA_CreateSecmem(
+					play.cas_session,
+					SERVICE_PVR_PLAY,
+					&sec_buf,
+					&sec_buf_size);
            if (!play.secmem_session) {
                 ERR("cas playback failed. secmem_session:%#x\n", play.secmem_session);
            }
@@ -970,9 +1291,11 @@ static int stop_playback(void)
 {
     dvr_wrapper_stop_playback((DVR_WrapperPlayback_t *)play.dvr_session);
     if (play.cas_session) {
-        AM_CA_DestroySecmem(play.secmem_session);
+        AM_CA_DestroySecmem(play.cas_session, play.secmem_session);
         AM_CA_CloseSession(play.cas_session);
     }
+    AmTsPlayer_stopAudioDecoding(play.player_session);
+    AmTsPlayer_stopVideoDecoding(play.player_session);
     AmTsPlayer_release(play.player_session);
 
     return 0;
@@ -1003,7 +1326,9 @@ static int cas_test_term(void)
         stop_recording(DVR_DEV_NO);
     }
 
-    if (has_playback(mode)) {
+    if (is_ext_playback(mode)) {
+	ext_dvr_playback_stop();
+    } else if (has_playback(mode)) {
         stop_playback();
     }
 
@@ -1027,14 +1352,13 @@ static void init_signal_handler()
 int main(int argc, char *argv[])
 {
     int ret;
-    int running = 1;
     char cmd[256];
     char tspath[256] = {0};
     int dvr_dev_no = 0;
     int fend_dev_no = 0;
     int prog_idx = 0;
     int scrambled = 1;
-    int freqM = 474;
+    int freqM = 394;
     dvb_service_info_t *prog = NULL;
 
     if (argc < 3) {
@@ -1064,11 +1388,21 @@ int main(int argc, char *argv[])
         strcpy(&tspath[0], argv[2]);
         mode = RECORDING;
     } else if (strcmp(argv[1], "dvrplay") == 0) {
+	int ret;
+	struct stat buf;
+
         strcpy(&tspath[0], argv[2]);
         if (argc > 3) {
             sscanf(argv[3], "%d", &scrambled);
         }
-        mode = PLAYBACK;
+	ret = stat(tspath, &buf);
+	if (ret == -1 && errno == ENOENT) {
+		//aml dvr file path
+		mode = PLAYBACK;
+	} else {
+		//external dvr file path
+		mode = EXT_PLAYBACK;
+	}
     } else {
         usage(argc, argv);
         exit(0);
@@ -1083,7 +1417,7 @@ int main(int argc, char *argv[])
             fend_lock(fend_dev_no, freqM);
 	    dvb_set_demux_source(DMX_DEV_NO, DVB_DEMUX_SOURCE_TS0);
 	} else {
-    	    dvb_service_info_t prog;
+	    dvb_service_info_t prog;
 
 	    dvb_set_demux_source(DMX_DEV_NO, DVB_DEMUX_SOURCE_DMA0);
 	    memset(&prog, 0, sizeof(prog));
@@ -1114,8 +1448,8 @@ int main(int argc, char *argv[])
         prog = aml_get_program(prog_idx);
         INF("try to play program:%d handle:%x\r\n", prog_idx, (uint32_t)prog);
         if (prog && is_live(mode)) {
-            start_liveplay(prog);
 	    start_descrambling(prog);
+            start_liveplay(prog);
         } else if (prog && is_live_local(mode)) {
 	    init_tsplayer_inject(prog);
 	    start_descrambling(prog);
@@ -1141,21 +1475,38 @@ int main(int argc, char *argv[])
 	dvb_set_demux_source(DMX_DEV_NO, DVB_DEMUX_SOURCE_DMA0);
 
         start_playback(tspath, scrambled, 0);
+    } else if (is_ext_playback(mode)) {
+	extern int ext_dvr_playback(const char *path, CasHandle cas_handle);
+
+        INF("try to play file:%s\r\n", tspath);
+	dvb_set_demux_source(DMX_DEV_NO, DVB_DEMUX_SOURCE_DMA0);
+        ext_dvr_playback(tspath, g_cas_handle);
     }
 
     sprintf(cmd, "echo 1 > /sys/class/graphics/fb0/osd_display_debug");
     system(cmd);
-
     sprintf(cmd, "echo 1 > /sys/class/graphics/fb0/blank");
     system(cmd);
+    sprintf(cmd, "echo 0 2 > /sys/class/video/path_select");
+    system(cmd);
+    sprintf(cmd, "echo 1 > /sys/class/video/video_global_output");
+    system(cmd);
+    sprintf(cmd, "echo 0 > /sys/class/video/disable_video");
+    system(cmd);
+
     while ( running ) {
         char buf[256];
         memset( buf, 0 , 256 );
 
         INF( "********************\n" );
         INF( "* commands:\n" );
-        INF( "* dvrrecord <dvr_dev_no> <prog_idx> <tspath>\n" );
+        INF( "* dvrrecord <dvr_dev_no> <prog_idx> <tspath> <algono>\n" );
         INF( "* dvrstop <dvr_dev_no>\n" );
+	INF( "* oc <value> [<AnalogProtection> <Cgmsa> <Emicci>]\n");
+	INF( "* pin <pin> <pinIdx> <reason>\n");
+	INF( "* wm <on> <config> <strength>\n");
+	INF( "* ta2ta <client id> <ascii input data>\n");
+	INF( "* arb <0>/<1>\n");
         INF( "* quit\n" );
         INF( "********************\n" );
 
@@ -1164,9 +1515,14 @@ int main(int argc, char *argv[])
                 running = 0;
             } else if (!strncmp(buf, "dvrrecord", 9)) {
                 int prog_idx;
+		uint8_t algo;
 
-                ret = sscanf(buf, "dvrrecord %d %d %255s", &dvr_dev_no, &prog_idx, &tspath[0]);
-                if (ret == 3) {
+                ret = sscanf(buf, "dvrrecord %d %d %255s %hhu", &dvr_dev_no,
+			     &prog_idx, &tspath[0], &algo);
+		if (ret == 4) {
+			dvr_test_config(algo);
+		}
+                if (ret >= 3) {
                     if (mode & RECORDING) {
                         ERR("DVR already start, please stop dvr first\r\n");
                         continue;
@@ -1190,7 +1546,7 @@ int main(int argc, char *argv[])
                         ERR("invalid prog_idx:%x \r\n", prog_idx);
                     }
                 }
-            } else if (!strncmp(buf, "dvrstop", 7)) {
+	    } else if (!strncmp(buf, "dvrstop", 7)) {
                 ret = sscanf(buf, "dvrstop %d", &dvr_dev_no);
                 if (ret != 1 || dvr_dev_no != 0)
                 {
@@ -1220,7 +1576,7 @@ int main(int argc, char *argv[])
                     strcpy(tspath, pfilename);
                     start_recording(DVR_DEV_NO, prog, tspath);
 
-		    dvb_set_demux_source(DMX_DEV_NO_2ND, DVB_DEMUX_SOURCE_DMA0);
+		    dvb_set_demux_source(DMX_DEV_NO_2ND, DVB_DEMUX_SOURCE_DMA1);
                     start_playback(prog, prog->scrambled, 0);
 
                 } else {
@@ -1241,6 +1597,68 @@ int main(int argc, char *argv[])
                 }
             } else if (!strncmp(buf, "cardno", 6)) {
 		show_cardno();
+	    } else if (!strncmp(buf, "wm", 2)) {
+		uint8_t on = 0, config = 0, strength = 0;
+		ret = sscanf(buf, "wm %hhu %hhu %hhu", &on, &config, &strength);
+		if (ret >= 1) {
+		    g_vm_config.run = 1;
+		    g_vm_config.on = on;
+		    g_vm_config.config = config;
+		    g_vm_config.strength = strength;
+		    watermark_test_config(on, config, strength);
+		}
+	    } else if (!strncmp(buf, "oc", 2)) {
+		uint32_t flag = 0;
+		uint8_t analog = 0, cgmsa = 0, emicci = 0;
+		ret = sscanf(buf, "oc %u %hhu %hhu %hhu", &flag, &analog, &cgmsa, &emicci);
+		if (ret >= 1) {
+		    output_control_test_config(flag, analog, cgmsa, emicci);
+		}
+	    } else if (!strncmp(buf, "pin", 3)) {
+		uint8_t pinIndex, reason;
+		char pin[64];
+
+		ret = sscanf(buf, "pin %s %hhu %hhu", pin, &pinIndex, &reason);
+		if (ret == 3) {
+			check_pin(pin, pinIndex, reason);
+		}
+	    } else if (!strncmp(buf, "svp", 3)) {
+		size_t addr;
+		ret = sscanf(buf, "svp 0x%x", &addr);
+		if (ret == 1) {
+		    svp_test_config(addr);
+		}
+	    } else if (!strncmp(buf, "arb", 3)) {
+		uint8_t flag;
+		ret = sscanf(buf, "arb %hhu", &flag);
+		if (ret == 1) {
+		    antirollback_test_config(flag);
+		}
+	    } else if (!strncmp(buf, "ta2ta", 5)) {
+		uint8_t *data = malloc(2048);
+		uint32_t len = 0;
+		uint32_t clientid;
+		uint32_t i;
+
+		if (buf[5] != '\0' && buf[6] != '\0' && buf[7] != '\0' && buf[8]!= '\0') {
+		    sscanf(buf, "ta2ta %u", &clientid);
+		    strncpy(data, buf + 8, 2048);
+		    data[2047] = '\0';
+		    len = strlen(data);
+		    INF("sending len=%u data=", len);
+		    for (i = 0; i < len &&  i < 256; i++) {
+			INF("%02x ", data[i]);
+		    }
+		    INF("\n");
+		    ta2ta_test_config(clientid, data, len);
+		    INF("received data=");
+		    for (i = 0; i < len &&  i < 256; i++) {
+			INF("%02x ", data[i]);
+		    }
+		    INF("\n");
+		}
+		if (data)
+		    free(data);
 	    }
         }
     };
