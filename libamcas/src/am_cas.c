@@ -288,7 +288,7 @@ AM_RESULT AM_CA_DVRSetPreParam(CasSession session, AM_CA_PreParam_t *param)
 {
     CAS_ASSERT(session);
 
-    if (cas_ops && cas_ops->dvr_start) {
+    if (cas_ops && cas_ops->dvr_set_pre_param) {
       return cas_ops->dvr_set_pre_param(session, param);
     }
 
