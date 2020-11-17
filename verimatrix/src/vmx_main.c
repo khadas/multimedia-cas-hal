@@ -278,7 +278,7 @@ static int vmx_get_storeinfo(
                 return 0;
             }
         } else {
-            if (offset > pstoreinfo->start && offset <= pstoreinfo->end) {
+            if (offset >= pstoreinfo->start && offset <= pstoreinfo->end) {
                 sinfo->len = pstoreinfo->info_len;
                 memcpy(sinfo->info, pstoreinfo->info_data, pstoreinfo->info_len);
                 CA_DEBUG(0, "found store info, offset:%lld, len:%#x",
