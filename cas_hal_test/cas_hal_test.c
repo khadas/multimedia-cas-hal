@@ -1513,7 +1513,22 @@ int main(int argc, char *argv[])
         if (fgets(buf, 256, stdin)) {
             if (!strncmp(buf, "quit", 4)) {
                 running = 0;
-            } else if (!strncmp(buf, "dvrrecord", 9)) {
+            } else if (!strncmp(buf, "zap", 3)) {
+		int prog_idx;
+
+		ret = sscanf(buf, "zap %d", &prog_idx);
+		if (ret >= 1) {
+		    if (is_live(mode)) {
+		        prog = aml_get_program(prog_idx);
+		        if (prog) {
+			    stop_liveplay();
+			    start_liveplay(prog);
+		            start_descrambling(prog);
+		        }
+		    }
+		}
+
+	    } else if (!strncmp(buf, "dvrrecord", 9)) {
                 int prog_idx;
 		uint8_t algo;
 
