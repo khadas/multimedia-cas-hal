@@ -868,28 +868,34 @@ static int vmx_start_descrambling(CasSession session, AM_CA_ServiceInfo_t *servi
 		return -1;
 	}
 
-#if 1
-	if (serviceInfo->service_mode == SERVICE_IPTV) {
-		dsc_algo = CA_ALGO_AES_ECB_CLR_END;
-		dsc_info.algo = DSC_ALGO_AES;
-	} else {
-		dsc_info.algo = DSC_ALGO_CSA2;
-	}
-#else
 	p = serviceInfo->ca_private_data;
 	if (serviceInfo->ca_private_data_len > 0) {
-		if (((p[0] & 0xE0) >> 5) == 1) {
-			dsc_algo = SCRAMBLE_ALGO_AES;
-			if (((p[0] & 0x8) >> 3) == 0) {
-				ca_svc_info.mode = SCRAMBLE_MODE_ECB;
-			} else {
-				ca_svc_info.mode = SCRAMBLE_MODE_CBC;
+		CA_DEBUG(0, "found ca private data: %#x %#x\n", p[1], p[2]);
+		if (p[1]) {
+			if (((p[2] & 0xE0) >> 5) == 1) {
+				dsc_algo = CA_ALGO_AES_ECB_CLR_END;
+				dsc_info.algo = DSC_ALGO_AES;
+				((CAS_SessionInfo_t *)session)->service_info.service_mode = SERVICE_IPTV;
+				CA_DEBUG(0, "Algo-AES found. IPTV service\n");
 			}
-			ca_svc_info.alignment = ((p[0] & 0x4) >> 2);
-			CA_DEBUG(0, "found Algo-AES");
+		} else {
+			CA_DEBUG(0, "scrambling descriptor:%#x\n", p[2]);
+			switch (p[2]) {
+			    case 0x1:
+			    case 0x2:
+				dsc_algo = CA_ALGO_CSA2;
+				dsc_info.algo = DSC_ALGO_CSA2;
+				break;
+			    case 0x3:
+			    case 0x4:
+			    case 0x5:
+				dsc_algo = CA_ALGO_CSA3;
+				dsc_info.algo = DSC_ALGO_CSA3;
+			    default:
+				break;
+			};
 		}
 	}
-#endif
 
 	for (i = 0; i < serviceInfo->stream_num; i++) {
 		dsc_chan_handle = ca_alloc_chan(dsc_dev,

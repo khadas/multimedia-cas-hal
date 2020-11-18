@@ -146,8 +146,10 @@ static int parse_pmt_section( const uint8_t *data, void *user_data )
         CA_DEBUG( 1, "%s, desc_tag:%d, desc_len:%d, ca_system_id:%#x, ca_pid:%#x",
                   __FUNCTION__, desc_tag, desc_len, ca_system_id, ca_pid );
         if (desc_tag == 0x65) {
-        CA_DEBUG(1, "Scrambling_descriptor(0x65) is found, algo:%#x\n", p[2]);
-          p_dvb_info[index].t_scramble_info.algo = p[2];
+		CA_DEBUG(1, "Scrambling_descriptor(0x65) is found, algo:%#x\n", p[2]);
+		p_dvb_info[index].private_data[0] = 3;
+		p_dvb_info[index].private_data[1] = 0;
+		p_dvb_info[index].private_data[2] = p[2];
         }
         if ( AM_CA_IsSystemIdSupported(ca_system_id) ) {
             p_dvb_info[index].i_ca_system_id = ca_system_id;
@@ -155,7 +157,13 @@ static int parse_pmt_section( const uint8_t *data, void *user_data )
             p_dvb_info[index].scrambled = 1;
         }
 
-
+	if ( desc_len > 4 ) {
+		CA_DEBUG( 1, "%s, @@this is ca_private_data, data:%#x",
+			  __FUNCTION__, p[6]);
+		p_dvb_info[index].private_data[0] = 3;
+		p_dvb_info[index].private_data[1] = 1;
+		p_dvb_info[index].private_data[2] = p[6];
+	}
         program_info_len -= ( desc_len + 2 );
         p += ( desc_len + 2 );
     }
@@ -352,30 +360,13 @@ static int parse_ca_descriptor( uint8_t *p, dvb_service_info_t **dvb_info, uint1
             }
         } else {
             CA_DEBUG(1, "%s, find a ca descriptor", __FUNCTION__);
-            if ( desc_len > 4 ) {
-                has_iv = p[6] & 0x1;
-                aligned = ( p[6] & 0x4 ) >> 2;
-                scramble_mode = ( p[6] & 0x8 ) >> 3;
-                algorithm = ( p[6] & 0xE0 ) >> 5;
-                CA_DEBUG( 1, "%s, @@this is ca_private_data, data:%#x, iv:%d, aligned:%d, mode:%d, algo:%d",
-                          __FUNCTION__, p[6], has_iv, aligned, scramble_mode, algorithm );
-                if ( algorithm == 1 ) {
-		    CA_DEBUG(1, "%s, AES scrambled", __FUNCTION__);
-                    p_dvb_info[index].t_scramble_info.algo = SCRAMBLE_ALGO_AES;
-                    if ( scramble_mode == 0 )
-                        p_dvb_info[index].t_scramble_info.mode = SCRAMBLE_MODE_ECB;
-                    else
-                        p_dvb_info[index].t_scramble_info.mode = SCRAMBLE_MODE_CBC;
-                    p_dvb_info[index].t_scramble_info.alignment = aligned;
-                    p_dvb_info[index].t_scramble_info.has_iv_value = has_iv;
-                    if ( has_iv && desc_len > 4 + 16 ) {
-                        memcpy( p_dvb_info[index].t_scramble_info.iv_value_data, &p[7], 16 );
-                    }
-                }
-
-            } else {
-                CA_DEBUG( 1, "%s, @@no ca_private_data", __FUNCTION__ );
-            }
+	    if ( desc_len > 4 ) {
+		CA_DEBUG( 1, "%s, @@this is ca_private_data, data:%#x",
+			  __FUNCTION__, p[6]);
+		p_dvb_info[index].private_data[0] = 3;
+		p_dvb_info[index].private_data[1] = 1;
+		p_dvb_info[index].private_data[2] = p[6];
+	    }
             if ( AM_CA_IsSystemIdSupported(ca_system_id) ) {
                 p_dvb_info[index].i_ca_system_id = ca_system_id;
                 if ( type == TYPE_AUDIO ) {

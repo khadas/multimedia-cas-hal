@@ -561,11 +561,6 @@ static int start_descrambling(dvb_service_info_t *prog)
     }
 
     memset(&cas_para, 0x0, sizeof(AM_CA_ServiceInfo_t));
-    //if (prog->t_scramble_info.algo == SCRAMBLE_ALGO_AES) {
-    if (prog->i_program_num == 1062) {
-	cas_para.service_mode = SERVICE_IPTV;
-	INF("IPTV service mode:%d\n", cas_para.service_mode);
-    }
 
     cas_para.service_id = prog->i_program_num;
     cas_para.service_type = SERVICE_LIVE_PLAY;
@@ -573,7 +568,10 @@ static int start_descrambling(dvb_service_info_t *prog)
     cas_para.stream_pids[0] = prog->i_video_pid;
     cas_para.stream_pids[1] = prog->i_audio_pid;
     cas_para.stream_num = 2;
-    cas_para.ca_private_data_len = 0;
+    if (prog->private_data[0]) {
+	memcpy(cas_para.ca_private_data, prog->private_data, prog->private_data[0]);
+    }
+    cas_para.ca_private_data_len = prog->private_data[0];
     ret = AM_CA_StartDescrambling(play.cas_session, &cas_para);
     if (ret) {
         ERR("CAS start descrambling failed. ret = %d\r\n", ret);
@@ -591,7 +589,7 @@ static int start_liveplay(dvb_service_info_t *prog)
     am_tsplayer_video_params vparam;
     am_tsplayer_audio_params aparam;
     am_tsplayer_init_params param;
-    am_tsplayer_avsync_mode avsyncmode = TS_SYNC_AMASTER;
+    am_tsplayer_avsync_mode avsyncmode = TS_SYNC_PCRMASTER;
 
     am_tsplayer_handle player_session;
     AM_CA_ServiceInfo_t cas_para;
