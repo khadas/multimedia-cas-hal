@@ -28,7 +28,6 @@ int pat_done_flag = 0;
 int pmt_done_flag = 0;
 int cat_done_flag = 0;
 int g_pmt_num = 0;
-uint16_t g_ca_system_id = 0xFFFF;
 uint32_t g_start_time = 0;
 
 int file_read(const char *name, char *buf, int len)
@@ -144,13 +143,13 @@ static int parse_pmt_section( const uint8_t *data, void *user_data )
         ca_system_id = p[2] << 8 | p[3];
         ca_pid = ( ( p[4] << 8 | p[5] ) & 0x1FFF );
         if (desc_tag == 0x9)
-        CA_DEBUG( 1, "%s, desc_tag:%d, desc_len:%d, ca_system_id:%#x, ca_pid:%#x, g_ca_sysID:%#x",
-                  __FUNCTION__, desc_tag, desc_len, ca_system_id, ca_pid, g_ca_system_id );
+        CA_DEBUG( 1, "%s, desc_tag:%d, desc_len:%d, ca_system_id:%#x, ca_pid:%#x",
+                  __FUNCTION__, desc_tag, desc_len, ca_system_id, ca_pid );
         if (desc_tag == 0x65) {
         CA_DEBUG(1, "Scrambling_descriptor(0x65) is found, algo:%#x\n", p[2]);
           p_dvb_info[index].t_scramble_info.algo = p[2];
         }
-        if ( ca_system_id == g_ca_system_id ) {
+        if ( AM_CA_IsSystemIdSupported(ca_system_id) ) {
             p_dvb_info[index].i_ca_system_id = ca_system_id;
             p_dvb_info[index].i_ecm_pid[0] = p_dvb_info[index].i_ecm_pid[1] = ca_pid;
             p_dvb_info[index].scrambled = 1;
@@ -302,7 +301,7 @@ static int parse_cat_section( const uint8_t *data, void *user_data )
         ca_pid = ( ( p[4] << 8 ) | p[5] ) & 0x1FFF;
         sec_len -= ( desc_len + 2 );
         p += ( desc_len + 2 );
-        if ( ca_system_id == g_ca_system_id ) {
+        if ( AM_CA_IsSystemIdSupported(ca_system_id) ) {
             p_dvb_info[index].i_ca_system_id = ca_system_id;
 
             for ( i = 0; i < g_pmt_num; i++ ) {
@@ -329,8 +328,8 @@ static int parse_ca_descriptor( uint8_t *p, dvb_service_info_t **dvb_info, uint1
         desc_len = p[1];
         ca_system_id = p[2] << 8 | p[3];
         ca_pid = ( ( p[4] << 8 | p[5] ) & 0x1FFF );
-        CA_DEBUG( 1, "%s, desc_tag:%#x, desc_len:%d, ca_system_id:%#x, ca_pid:%#x, g_ca_sysID:%#x",
-                  __FUNCTION__, desc_tag, desc_len, ca_system_id, ca_pid, g_ca_system_id );
+        CA_DEBUG( 1, "%s, desc_tag:%#x, desc_len:%d, ca_system_id:%#x, ca_pid:%#x",
+                  __FUNCTION__, desc_tag, desc_len, ca_system_id, ca_pid);
 
         if( desc_tag != 0x9 ) {
             CA_DEBUG(1, "%s, this tag is not ca descriptor", __FUNCTION__);
@@ -377,7 +376,7 @@ static int parse_ca_descriptor( uint8_t *p, dvb_service_info_t **dvb_info, uint1
             } else {
                 CA_DEBUG( 1, "%s, @@no ca_private_data", __FUNCTION__ );
             }
-            if ( ca_system_id == g_ca_system_id ) {
+            if ( AM_CA_IsSystemIdSupported(ca_system_id) ) {
                 p_dvb_info[index].i_ca_system_id = ca_system_id;
                 if ( type == TYPE_AUDIO ) {
                     p_dvb_info[index].i_ecm_pid[0] = ca_pid;
@@ -537,10 +536,4 @@ dvb_service_info_t* aml_get_program(uint32_t prog_index)
     }
 
     return &g_info[prog_index];
-}
-
-int aml_set_ca_system_id(int ca_sys_id)
-{
-	g_ca_system_id = ca_sys_id;
-	return 0;
 }

@@ -75,7 +75,6 @@
 #define DSC_DEV_NO (0)
 #define DVR_DEV_NO (0)
 
-#define VMX_SYS_ID (0x1724)
 #define VMX_CAS_STRING "Verimatrix"
 
 #define RECORD_BLOCK_SIZE (188*1024)//same to asyncfifo flush size, it's enc block size and dec block size//65424
@@ -1435,7 +1434,6 @@ int main(int argc, char *argv[])
 	    pthread_create(&gInjectThread, NULL, inject_thread, &tspath[0]);
 	}
 
-        aml_set_ca_system_id(VMX_SYS_ID);
         INF("%d programs scanned\r\n", aml_scan());
 
 	if (is_live_local(mode)) {
