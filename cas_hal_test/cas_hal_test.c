@@ -596,7 +596,7 @@ static int start_liveplay(dvb_service_info_t *prog)
     am_tsplayer_video_params vparam;
     am_tsplayer_audio_params aparam;
     am_tsplayer_init_params param;
-    am_tsplayer_avsync_mode avsyncmode = TS_SYNC_PCRMASTER;
+    am_tsplayer_avsync_mode avsyncmode = TS_SYNC_AMASTER;
 
     am_tsplayer_handle player_session;
     AM_CA_ServiceInfo_t cas_para;
@@ -881,11 +881,8 @@ static int dvr_test_config(uint8_t algo)
     cJSON_AddItemToObject(input, ITEM_ALGO, item);
 
     cJSON_PrintPreallocated(input, in_json, MAX_JSON_LEN, 1);
-    printf("in_json:\n%s\n", in_json);
-    if (has_recording(mode)) {
-	AM_CA_Ioctl(recorder.cas_session, in_json, out_json, MAX_JSON_LEN);
-	INF("out_json:\n%s\n", out_json);
-    }
+    AM_CA_Ioctl(recorder.cas_session, in_json, out_json, MAX_JSON_LEN);
+    INF("out_json:\n%s\n", out_json);
 
     return 0;
 }
@@ -1142,6 +1139,10 @@ static int start_playback(void *params, int scrambled, int pause)
     int vpid = 1024, apid = 1025, vfmt = 0, afmt = 0;
     int error;
 
+    void *sec_buf;
+    uint32_t sec_buf_size = 0;
+    CA_SERVICE_TYPE_t service_type = SERVICE_PVR_PLAY;
+
     memset(&play_params, 0, sizeof(play_params));
     memset(&play_pids, 0, sizeof(play_pids));
 
@@ -1166,6 +1167,26 @@ static int start_playback(void *params, int scrambled, int pause)
 
     }
     INF("vpid:%#x vfmt:%d apid:%#x afmt:%d\n", vpid, vfmt, apid, afmt);
+
+    if (scrambled) {
+	error = AM_CA_OpenSession(
+		g_cas_handle,
+		&play.cas_session,
+		service_type);
+	INF("%s open cas session:%#x, start cas\n",
+		__func__, play.cas_session);
+
+	AM_CA_RegisterEventCallback(play.cas_session, cas_event_cb);
+
+        play.secmem_session = AM_CA_CreateSecmem(
+				play.cas_session,
+				SERVICE_PVR_PLAY,
+				&sec_buf,
+				&sec_buf_size);
+        if (!play.secmem_session) {
+	    ERR("cas playback failed. secmem_session:%#x\n", play.secmem_session);
+        }
+    }
 
     switch (vfmt) {
         case AV_VIDEO_CODEC_MPEG1:
@@ -1261,27 +1282,6 @@ static int start_playback(void *params, int scrambled, int pause)
        play.dvr_session = (void *)player;
 
        if (scrambled) {
-           void *sec_buf;
-           uint32_t sec_buf_size = 0;
-	   CA_SERVICE_TYPE_t service_type = SERVICE_PVR_PLAY;
-
-	   error = AM_CA_OpenSession(
-			g_cas_handle,
-			&play.cas_session,
-			service_type);
-	   INF("%s open cas session:%#x, start cas\n",
-		__func__, play.cas_session);
-
-	   AM_CA_RegisterEventCallback(play.cas_session, cas_event_cb);
-
-           play.secmem_session = AM_CA_CreateSecmem(
-					play.cas_session,
-					SERVICE_PVR_PLAY,
-					&sec_buf,
-					&sec_buf_size);
-           if (!play.secmem_session) {
-                ERR("cas playback failed. secmem_session:%#x\n", play.secmem_session);
-           }
            INF("cas playback set secure buffer:%#x, secure buffer size:%#x\n",
                         sec_buf, sec_buf_size);
            dvr_wrapper_set_playback_secure_buffer(player, sec_buf, sec_buf_size);
@@ -1553,7 +1553,7 @@ int main(int argc, char *argv[])
 
                 ret = sscanf(buf, "dvrrecord %d %d %255s %hhu %d", &dvr_dev_no,
 			     &prog_idx, &tspath[0], &algo, &isIPTV);
-		if (ret == 4) {
+		if (ret >= 4) {
 			dvr_test_config(algo);
 		}
                 if (ret >= 3) {
