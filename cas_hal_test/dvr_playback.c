@@ -260,6 +260,12 @@ int ext_dvr_playback(const char *path, CasHandle cas_handle)
 
     INF("external vpid:%#x vfmt:%d apid:%#x afmt:%d\n", vpid, vfmt, apid, afmt);
 
+    error = AM_CA_OpenSession(
+		cas_handle,
+		&cas_session,
+		SERVICE_PVR_PLAY);
+    INF("%s open cas session:%#x, start cas\n", __func__, cas_session);
+
      /*open TsPlayer*/
     {
        am_tsplayer_result result =
@@ -303,14 +309,6 @@ int ext_dvr_playback(const char *path, CasHandle cas_handle)
 	result = AmTsPlayer_setTrickMode(tsplayer_handle, AV_VIDEO_TRICK_MODE_NONE);
 	INF( " TsPlayer show audio decoding %s, result(%d)\n", (result)? "FAIL" : "OK", result);
     }
-
-
-	error = AM_CA_OpenSession(
-		cas_handle,
-		&cas_session,
-		SERVICE_PVR_PLAY);
-	INF("%s open cas session:%#x, start cas\n", __func__, cas_session);
-
 	INF( "Starting playback\n");
 
 	pthread_create(&gInjectThread, NULL, inject_thread, path);
