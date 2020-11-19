@@ -8,6 +8,9 @@ typedef enum {
     TYPE_INVALID
 } STREAM_TYPE_t;
 
+#define DVB_TYPE 0
+#define IPTV_TYPE 1
+
 typedef struct dvb_service_info_s {
 
     uint16_t                    i_program_num;
@@ -29,6 +32,7 @@ typedef struct dvb_service_info_s {
     int                         i_video_channel;
 
     int                         scrambled;
+    int				service_type;
 } dvb_service_info_t;
 
 int aml_scan(void);
