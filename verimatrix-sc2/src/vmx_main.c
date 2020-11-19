@@ -875,8 +875,7 @@ static int vmx_start_descrambling(CasSession session, AM_CA_ServiceInfo_t *servi
 			if (((p[2] & 0xE0) >> 5) == 1) {
 				dsc_algo = CA_ALGO_AES_ECB_CLR_END;
 				dsc_info.algo = DSC_ALGO_AES;
-				((CAS_SessionInfo_t *)session)->service_info.service_mode = SERVICE_IPTV;
-				CA_DEBUG(0, "Algo-AES found. IPTV service\n");
+				CA_DEBUG(0, "Algo-AES found.\n");
 			}
 		} else {
 			CA_DEBUG(0, "scrambling descriptor:%#x\n", p[2]);

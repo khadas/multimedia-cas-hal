@@ -561,6 +561,13 @@ static int start_descrambling(dvb_service_info_t *prog)
     }
 
     memset(&cas_para, 0x0, sizeof(AM_CA_ServiceInfo_t));
+    if (prog->service_type == IPTV_TYPE) {
+	cas_para.service_mode = SERVICE_IPTV;
+	INF("IPTV service mode:%d\n", cas_para.service_mode);
+    } else {
+	cas_para.service_mode = SERVICE_DVB;
+	INF("DVB service mode:%d\n", cas_para.service_mode);
+    }
 
     cas_para.service_id = prog->i_program_num;
     cas_para.service_type = SERVICE_LIVE_PLAY;
@@ -774,6 +781,13 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
         cas_para.stream_num = 2;
         cas_para.ca_private_data_len = 0;
 
+	if (prog->service_type == IPTV_TYPE) {
+	    cas_para.service_mode = SERVICE_IPTV;
+	    INF("IPTV service mode:%d\n", cas_para.service_mode);
+	} else {
+	    cas_para.service_mode = SERVICE_DVB;
+	    INF("DVB service mode:%d\n", cas_para.service_mode);
+	}
         error = AM_CA_DVRStart(recorder.cas_session, &cas_para);
         if (error) {
             ERR("CAS start DVR failed. ret = %d\r\n", error);
@@ -1302,7 +1316,7 @@ static void usage(int argc, char *argv[])
 {
     UNUSED(argc);
 
-    INF("Usage: live      : %s live <fend_dev_no> <prog_idx> <freqM>\n", argv[0]);
+    INF("Usage: live      : %s live <fend_dev_no> <prog_idx> <freqM> <isIPTV>\n", argv[0]);
     INF("Usage: local	  : %s local <tsfile> <prog_idx>\n", argv[0]);
     INF("Usage: playback  : %s dvrplay <tsfile> <scramble_flag>\n", argv[0]);
 }
@@ -1356,6 +1370,7 @@ int main(int argc, char *argv[])
     int prog_idx = 0;
     int scrambled = 1;
     int freqM = 394;
+    int isIPTV = 0;
     dvb_service_info_t *prog = NULL;
 
     if (argc < 3) {
@@ -1376,6 +1391,9 @@ int main(int argc, char *argv[])
         }
 	if (argc > 4) {
 	    sscanf(argv[4], "%d", &freqM);
+	}
+	if (argc > 5) {
+	    sscanf(argv[5], "%d", &isIPTV);
 	}
     } else if (strcmp(argv[1], "local") == 0) {
         mode = LIVE_LOCAL;
@@ -1444,6 +1462,11 @@ int main(int argc, char *argv[])
         prog = aml_get_program(prog_idx);
         INF("try to play program:%d handle:%x\r\n", prog_idx, (uint32_t)prog);
         if (prog && is_live(mode)) {
+	    if (isIPTV) {
+	        prog->service_type = IPTV_TYPE;
+	    } else {
+	        prog->service_type = DVB_TYPE;
+	    }
 	    start_descrambling(prog);
             start_liveplay(prog);
         } else if (prog && is_live_local(mode)) {
@@ -1496,7 +1519,7 @@ int main(int argc, char *argv[])
 
         INF( "********************\n" );
         INF( "* commands:\n" );
-        INF( "* dvrrecord <dvr_dev_no> <prog_idx> <tspath> <algono>\n" );
+        INF( "* dvrrecord <dvr_dev_no> <prog_idx> <tspath> <algono> <isIPTV>\n" );
         INF( "* dvrstop <dvr_dev_no>\n" );
 	INF( "* oc <value> [<AnalogProtection> <Cgmsa> <Emicci>]\n");
 	INF( "* pin <pin> <pinIdx> <reason>\n");
@@ -1528,8 +1551,8 @@ int main(int argc, char *argv[])
                 int prog_idx;
 		uint8_t algo;
 
-                ret = sscanf(buf, "dvrrecord %d %d %255s %hhu", &dvr_dev_no,
-			     &prog_idx, &tspath[0], &algo);
+                ret = sscanf(buf, "dvrrecord %d %d %255s %hhu %d", &dvr_dev_no,
+			     &prog_idx, &tspath[0], &algo, &isIPTV);
 		if (ret == 4) {
 			dvr_test_config(algo);
 		}
@@ -1545,6 +1568,11 @@ int main(int argc, char *argv[])
                     prog = aml_get_program(prog_idx);
                     INF("try to record program:%d handle:%x\r\n", prog_idx, (uint32_t)prog);
                     if (prog) {
+			if (isIPTV) {
+			    prog->service_type = IPTV_TYPE;
+			} else {
+			    prog->service_type = DVB_TYPE;
+			}
                         ret = start_recording(dvr_dev_no, prog, tspath);
                         if (!ret) {
                             mode |= RECORDING;
