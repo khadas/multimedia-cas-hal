@@ -769,17 +769,17 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
         } else {
             cas_para.dmx_dev = DMX_DEV_NO;
         }
-	if (prog->i_program_num == 1062) {
-	    cas_para.service_mode = SERVICE_IPTV;
-	    INF("IPTV service mode:%d\n", cas_para.service_mode);
-	}
+
         cas_para.service_id = prog->i_service_num;
         cas_para.service_type = SERVICE_PVR_RECORDING;
         cas_para.ecm_pid = prog->i_ecm_pid[0];
         cas_para.stream_pids[0] = prog->i_video_pid;
         cas_para.stream_pids[1] = prog->i_audio_pid;
         cas_para.stream_num = 2;
-        cas_para.ca_private_data_len = 0;
+	if (prog->private_data[0]) {
+	    memcpy(cas_para.ca_private_data, prog->private_data, prog->private_data[0]);
+	}
+	cas_para.ca_private_data_len = prog->private_data[0];
 
 	if (prog->service_type == IPTV_TYPE) {
 	    cas_para.service_mode = SERVICE_IPTV;
@@ -1551,6 +1551,7 @@ int main(int argc, char *argv[])
                 int prog_idx;
 		uint8_t algo;
 
+		isIPTV = 0;
                 ret = sscanf(buf, "dvrrecord %d %d %255s %hhu %d", &dvr_dev_no,
 			     &prog_idx, &tspath[0], &algo, &isIPTV);
 		if (ret >= 4) {
