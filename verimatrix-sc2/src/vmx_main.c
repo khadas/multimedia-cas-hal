@@ -2,6 +2,7 @@
 #define CA_DEBUG_LEVEL 2
 #endif
 
+#define BC_DVR_INCLUDED
 #define _GNU_SOURCE
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,8 +42,6 @@
 #define VMX_MAGIC_NUM           0xBEEFBEEF
 #define NODE_IS_REWIND(p) \
     (p->end <= p->start ? 1 : 0)
-
-#define USE_NEW_M2M_API
 
 typedef struct {
 	uint32_t magic;
@@ -109,15 +108,11 @@ typedef struct {
 	int dsc_dev;
 	int dmx_dev;
 	uint8_t service_index;
-	int dsc_svc_handle;
 	int dsc_chan_handle[MAX_CHAN_COUNT];
 	int dsc_chan_count;
 	vmx_pipeline_t pipeline;
 
 	int emm_pid;
-#ifndef USE_NEW_M2M_API
-	uint8_t *dvr_shm;
-#endif
 	uint8_t dvr_channelid;
 
 	int dvr_dev;
@@ -166,6 +161,10 @@ static int vmx_get_fname(char fname[MAX_LOCATION_SIZE],
 	const char location[MAX_LOCATION_SIZE],
 	uint64_t segment_id);
 
+extern int vmx_port_init(void);
+extern int vmx_port_deinit(void);
+extern int am_smc_init(void);
+extern void_t vmx_notify_func(enBcNotify_t n);
 extern int vmx_interact_ioctl(CasSession session, const char *in_json, const char *out_json, uint32_t out_len);
 
 const struct AM_CA_Impl_t cas_ops = {
@@ -196,13 +195,12 @@ const struct AM_CA_Impl_t cas_ops = {
 
 #define IPTV_OFFSET 4
 static CAS_EventFunction_t g_event_cb;
-#ifndef USE_NEW_M2M_API
-static uint8_t *g_dvr_shm = NULL;
-#endif
 static vmx_emm_info_t g_emm_info[DMX_DEV_COUNT];
 static vmx_svc_idx_t g_svc_idx[MAX_CHAN_COUNT];
 static vmx_dvr_channelid_t g_dvr_channelid[MAX_CHAN_COUNT];
+#ifdef INDIV_AUTO
 static pthread_t indiv_thread = (pthread_t)NULL;
+#endif
 static pthread_t bcThread = (pthread_t)NULL;
 static pthread_mutex_t vmx_bc_mutex = PTHREAD_RECURSIVE_MUTEX_INITIALIZER_NP;
 
@@ -297,7 +295,7 @@ static int vmx_get_storeinfo(
 			if (offset > pstoreinfo->start || offset >= pstoreinfo->end) {
 				sinfo->len = pstoreinfo->info_len;
 				memcpy(sinfo->info, pstoreinfo->info_data, pstoreinfo->info_len);
-				CA_DEBUG(0, "found revind store info, offset:%d, len:%#x",
+				CA_DEBUG(0, "found revind store info, offset:%lld, len:%#x",
 					pstoreinfo->start, pstoreinfo->info_len);
 				return 0;
 			}
@@ -325,7 +323,6 @@ static int vmx_get_storeinfo(
 
 static int vmx_get_store_region(CasSession session, AM_CA_StoreRegion_t *region, uint8_t *reg_cnt)
 {
-	int i;
 	int idx = 0;
 	struct list_head *pos, *q;
 	vmx_crypto_storeinfo_t *pstoreinfo;
@@ -398,7 +395,7 @@ static uint8_t alloc_service_idx(CasSession session)
 		g_svc_idx[i].svc_idx = i;
 	}
 
-	CA_DEBUG(0, "allocated vmx svc idx %d. private_data:%#x",
+	CA_DEBUG(0, "allocated vmx svc idx %d. private_data:%p",
 		 g_svc_idx[i].svc_idx,
 		 (VMX_PrivateInfo_t *)((CAS_SessionInfo_t *)session)->private_data);
 	return g_svc_idx[i].svc_idx;
@@ -601,6 +598,7 @@ static void *bcHandlingThread(void *pParam)
 	return NULL;
 }
 
+#ifdef INDIV_AUTO
 static void* vmx_indiv_thread(void *arg)
 {
 	int ret;
@@ -612,6 +610,7 @@ static void* vmx_indiv_thread(void *arg)
 	char *datafile = "/system/bin/datafile.dat";
 	char cmd[512] = {0};
 
+	UNUSED(arg);
 	while (1) {
 		ret = property_get("vmx.indiv.server.ip", ip, NULL);
 		if (ret) {
@@ -646,6 +645,7 @@ static void* vmx_indiv_thread(void *arg)
 
 	return NULL;
 }
+#endif
 
 static void print_scinfo(void)
 {
@@ -677,10 +677,11 @@ static int vmx_pre_init(void)
 	uint8_t date[20];
 	uint8_t timestr[20];
 
+#ifdef INDIV_AUTO
 	char path[64];
 	int fileid = 0;
 	struct stat buf;
-#if 0
+
 	sprintf(path, "%s%d", AM_NVM_FILE, fileid);
 	bcRet = stat(path, &buf);
 	if (bcRet == -1 && errno == ENOENT) {
@@ -717,9 +718,7 @@ static int vmx_init(CasHandle handle)
 {
 	UNUSED(handle);
 	CA_DEBUG(0, "%s", __func__);
-#ifndef USE_NEW_M2M_API
-	g_dvr_shm = (uint8_t *)VMXCA_AllocShareMem(DVR_SIZE);
-#endif
+
 	memset(g_svc_idx, 0, sizeof(vmx_svc_idx_t)*MAX_CHAN_COUNT);
 	memset(g_emm_info, 0, sizeof(vmx_emm_info_t)*DMX_DEV_COUNT);
 
@@ -733,10 +732,6 @@ static int vmx_term(CasHandle handle)
 	VMXCA_UnInit();
 	vmx_port_deinit();
 	pthread_join(bcThread, NULL);
-#ifndef USE_NEW_M2M_API
-	VMXCA_FreeShareMem(g_dvr_shm);
-	g_dvr_shm = NULL;
-#endif
 
 	return 0;
 }
@@ -760,12 +755,12 @@ static int vmx_isSystemId_supported(int CA_system_id)
 static int vmx_open_session(CasHandle handle, CasSession session, CA_SERVICE_TYPE_t service_type)
 {
 	int ret;
-	int dsc_svc_handle;
 	VMX_PrivateInfo_t *private_data = NULL;
 
 	pipeline_create_param_t pipeline_param;
 	pipeline_handle_t pipeline_handle = -1;
 
+	UNUSED(handle);
 	switch (service_type) {
 	case SERVICE_LIVE_PLAY:
 		pipeline_param.mode = PIPELINE_MODE_LIVE;
@@ -779,7 +774,7 @@ static int vmx_open_session(CasHandle handle, CasSession session, CA_SERVICE_TYP
 		pipeline_param.mode = PIPELINE_MODE_PLAYBACK;
 		break;
 
-defalut:
+	default:
 		CA_DEBUG(1, "invalid servie type %d\n", service_type);
 		break;
 	};
@@ -793,7 +788,6 @@ defalut:
 
 	private_data = (VMX_PrivateInfo_t *)malloc(sizeof(VMX_PrivateInfo_t));
 	memset((void *)private_data, 0x0, sizeof(VMX_PrivateInfo_t));
-	private_data->dsc_svc_handle = dsc_svc_handle;
 	private_data->dvr_channelid = -1;
 	private_data->dat_fp = NULL;
 	private_data->segment_id = -1;
@@ -801,6 +795,7 @@ defalut:
 	private_data->pipeline.mode = pipeline_param.mode;
 	private_data->pipeline.handle = pipeline_handle;
 	memset(&private_data->storeinfo_ctx, 0, sizeof(vmx_crypto_storeinfo_t));
+	memset(&private_data->cur_storeinfo, 0, sizeof(vmx_storeinfo_t));
 
 	((CAS_SessionInfo_t *)session)->private_data = private_data;
 	((CAS_SessionInfo_t *)session)->service_info.service_type = service_type;
@@ -825,7 +820,6 @@ static int vmx_close_session(CasSession session)
 
 static int vmx_start_descrambling(CasSession session, AM_CA_ServiceInfo_t *serviceInfo)
 {
-	char buf[64], src[64];
 	uint8_t *p;
 	int i, ret;
 	int dsc_chan_handle = -1;
@@ -999,7 +993,9 @@ static int vmx_start_descrambling(CasSession session, AM_CA_ServiceInfo_t *servi
 
 static int vmx_update_descrambling_pid(CasSession session, uint16_t oldStreamPid, uint16_t newStreamPid)
 {
-	//TODO: support audio track select
+	UNUSED(session);
+	UNUSED(oldStreamPid);
+	UNUSED(newStreamPid);
 	return 0;
 }
 
@@ -1098,9 +1094,7 @@ static int vmx_dvr_start(CasSession session, AM_CA_ServiceInfo_t *service_info)
 	vmx_recinfo_t recinfo;
 	uint8_t dvbtime[5], channelid;
 	VMX_PrivateInfo_t *private_data;
-#ifdef USE_NEW_M2M_API
 	m2m_info_t m2m_info;
-#endif
 
 	CA_DEBUG(0, "%s line %d", __func__, __LINE__);
 	ret = vmx_start_descrambling(session, service_info);
@@ -1120,11 +1114,6 @@ static int vmx_dvr_start(CasSession session, AM_CA_ServiceInfo_t *service_info)
 
 	vmx_bc_lock();
 	private_data = (VMX_PrivateInfo_t *)((CAS_SessionInfo_t *)session)->private_data;
-#ifndef USE_NEW_M2M_API
-	if (private_data && (private_data->dvr_shm == NULL)) {
-		private_data->dvr_shm = g_dvr_shm;
-	}
-#endif
 
 	private_data->dvr_dev = service_info->dvr_dev;
 	memset(&recinfo, 0, sizeof(vmx_recinfo_t));
@@ -1145,19 +1134,17 @@ static int vmx_dvr_start(CasSession session, AM_CA_ServiceInfo_t *service_info)
 		return -1;
 	}
 
-#ifdef USE_NEW_M2M_API
-    vmx_bc_lock();
-    memset(&m2m_info, 0, sizeof(m2m_info_t));
-    m2m_info.engine_id = private_data->dvr_channelid;
-    m2m_info.hw_mode = 0;
-    ret = VMXCA_PipelineSetM2MInfo(private_data->pipeline.handle,  &m2m_info);
-    if (ret) {
-	CA_DEBUG(0, "Set M2M info failed\n");
+	vmx_bc_lock();
+	memset(&m2m_info, 0, sizeof(m2m_info_t));
+	m2m_info.engine_id = private_data->dvr_channelid;
+	m2m_info.hw_mode = 0;
+	ret = VMXCA_PipelineSetM2MInfo(private_data->pipeline.handle,  &m2m_info);
+	if (ret) {
+		CA_DEBUG(0, "Set M2M info failed\n");
+		vmx_bc_unlock();
+		vmx_stop_descrambling(session);
+	}
 	vmx_bc_unlock();
-	vmx_stop_descrambling(session);
-    }
-    vmx_bc_unlock();
-#endif
 
 	return 0;
 }
@@ -1187,12 +1174,6 @@ static int vmx_dvr_stop(CasSession session)
 		private_data->dat_fp = NULL;
 	}
 
-#ifndef USE_NEW_M2M_API
-	if (private_data && private_data->dvr_shm) {
-		private_data->dvr_shm = NULL;
-	}
-#endif
-
 	ret = vmx_stop_descrambling(session);
 	if (ret) {
 		CA_DEBUG(2, "Stop descrambling for DVR failed");
@@ -1210,15 +1191,12 @@ static int vmx_dvr_encrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 	uint8_t channelid;
 	vmx_storeinfo_t storeinfo;
 	VMX_PrivateInfo_t * private_data;
-	shm_r2r_t shm_in, shm_out;
 	uint8_t *aligned_buff_addr = NULL;
 	uint32_t block_size = DVR_SIZE;
 	vmxca_result_t result;
-#ifdef USE_NEW_M2M_API
 	m2m_engine_conf_t m2m_eng_conf;
 	uint8_t *p_vr_buffer = NULL;
 	uint32_t vr_buffer_len = 0;
-#endif
 
 	if (cryptoPara->buf_len > DVR_SIZE) {
 		CA_DEBUG(2, "encrypt buffer overflow %#x", block_size);
@@ -1265,6 +1243,24 @@ static int vmx_dvr_encrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 		fwrite(&info_len, sizeof(info_len), 1, private_data->dat_fp);
 		fwrite(info.info, 1, sizeof(info.info), private_data->dat_fp);
 
+		if (private_data->cur_storeinfo.len) {
+			int error;
+			uint16_t storelen;
+			loff_t streampos;
+			vmx_storeinfo_t *storeinfo = &private_data->cur_storeinfo;
+
+			streampos = bswap_64(cryptoPara->offset);
+			error = fwrite(&streampos, 1, sizeof(streampos), private_data->dat_fp);
+			storelen = bswap_16(storeinfo->len);
+			error = fwrite(&storelen, 1, sizeof(storelen), private_data->dat_fp);
+			error = fwrite(storeinfo->info, 1, storeinfo->len, private_data->dat_fp);
+			CA_DEBUG(0, "ret:%d, segment %d to segment %d, copy latest storeinfo",
+				 error, private_data->segment_id,
+				 cryptoPara->segment_id);
+
+			fflush(private_data->dat_fp);
+		}
+
 		private_data->segment_id = cryptoPara->segment_id;
 		CA_DEBUG(0, "%s %s created", __func__, dat_fname);
 	}
@@ -1274,7 +1270,6 @@ static int vmx_dvr_encrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 	channelid = private_data->dvr_channelid;
 	memset(&storeinfo, 0, sizeof(vmx_storeinfo_t));
 	storeinfo.len = MAX_STOREINFO_LEN;
-#ifdef USE_NEW_M2M_API
 	memset(&m2m_eng_conf, 0, sizeof(m2m_engine_conf_t));
 	m2m_eng_conf.p_in = (uint8_t *)aligned_buff_addr;
 	m2m_eng_conf.in_len = block_size;
@@ -1284,7 +1279,7 @@ static int vmx_dvr_encrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 
 	result = VMXCA_GetViewRightPadBuffer(&p_vr_buffer, &vr_buffer_len);
 	CA_DEBUG(0, "crypto vr:%p, len:%#x", p_vr_buffer, vr_buffer_len);
-	CA_DEBUG(0, "crypto [iaddr:%#x, size:%#x] [oaddr:%#x, size:%#x]",
+	CA_DEBUG(0, "crypto [iaddr:%p, size:%#x] [oaddr:%p, size:%#x]",
                 m2m_eng_conf.p_in, m2m_eng_conf.in_len,
                 m2m_eng_conf.p_out, m2m_eng_conf.out_len);
 
@@ -1292,30 +1287,6 @@ static int vmx_dvr_encrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 			p_vr_buffer, vr_buffer_len,
 			storeinfo.info, &storeinfo.len);
 
-#else
-	VMXCA_PipelineUpdateRecordBuffer(
-		private_data->pipeline.handle,
-		aligned_buff_addr,
-		block_size);
-
-	memset(&shm_in, 0x0, sizeof(shm_r2r_t));
-	shm_in.magic = SHM_R2R_MAGIC;
-	shm_in.type = SHM_R2R_TYPE_SEC;
-	shm_in.paddr = (void *)aligned_buff_addr;
-	shm_in.size = block_size;
-
-	memset(&shm_out, 0x0, sizeof(shm_r2r_t));
-	shm_out.magic = SHM_R2R_MAGIC;
-	shm_out.type = SHM_R2R_TYPE_REE;
-	shm_out.vaddr = private_data->dvr_shm;
-	shm_out.size = cryptoPara->buf_out.size;
-
-	CA_DEBUG(0, "CAS DVR Encrypt[%d] (%#x, %#x, %#x)",
-		channelid, shm_in.paddr, shm_out.vaddr, shm_in.size);
-	rc = BC_DVREncrypt(channelid, (uint8_t *)&shm_out,
-			(uint8_t *)&shm_in, sizeof(shm_r2r_t),
-			storeinfo.info, &storeinfo.len);
-#endif
 	if (rc != k_BcSuccess) {
 		CA_DEBUG(0, "BC_DVREncrypt failed, rc = %d", rc);
 		storeinfo.len = 0;
@@ -1335,8 +1306,10 @@ static int vmx_dvr_encrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 		CA_DEBUG(0, "Enc write data, writed:%d", error);
 
 		fflush(private_data->dat_fp);
+		memcpy(&private_data->cur_storeinfo, &storeinfo,
+		       sizeof(vmx_storeinfo_t));
 	}
-#ifdef USE_NEW_M2M_API
+
 	result = VMXCA_PipelineM2MEngineRun(
 			private_data->pipeline.handle,
 			&m2m_eng_conf);
@@ -1347,13 +1320,6 @@ static int vmx_dvr_encrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 	cryptoPara->buf_len = m2m_eng_conf.out_len;
 	cryptoPara->buf_out.size = m2m_eng_conf.out_len;
 	private_data->wait_enc_len -= block_size;
-#else
-	VMXCA_UpdateToTEE(shm_out.vaddr, shm_out.size);
-	memcpy((void *)cryptoPara->buf_out.addr, shm_out.vaddr, block_size);
-	cryptoPara->buf_len = block_size;
-	private_data->wait_enc_len -= block_size;
-	cryptoPara->buf_out.size = block_size;
-#endif
 	vmx_bc_unlock();
 
 	return 0;
@@ -1365,13 +1331,9 @@ static int vmx_dvr_decrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 	VMX_PrivateInfo_t * private_data;
 	uint8_t dvbtime[5];
 	vmx_storeinfo_t storeinfo;
-#ifdef USE_NEW_M2M_API
 	uint8_t *p_vr_buffer = NULL;
 	uint32_t vr_buffer_len = 0;
 	m2m_engine_conf_t m2m_eng_conf;
-#else
-	shm_r2r_t shm_in, shm_out;
-#endif
 
 	if (cryptoPara->buf_len > DVR_SIZE) {
 		CA_DEBUG(2, "decrypt buffer overflow DVR_SIZE");
@@ -1402,7 +1364,6 @@ static int vmx_dvr_decrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 		       sizeof(vmx_storeinfo_t));
 	}
 
-#ifdef USE_NEW_M2M_API
 	memset(&m2m_eng_conf, 0, sizeof(m2m_engine_conf_t));
 	m2m_eng_conf.p_in = (uint8_t *)cryptoPara->buf_in.addr;
 	m2m_eng_conf.in_len = cryptoPara->buf_in.size;
@@ -1411,7 +1372,7 @@ static int vmx_dvr_decrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 	m2m_eng_conf.usage = M2M_ENGINE_USAGE_PLAYBACK;
 
 	rc = VMXCA_GetViewRightPadBuffer(&p_vr_buffer, &vr_buffer_len);
-	CA_DEBUG(0, "CAS DVR Decrypt[%d] (%#x, %#x, %#x), offset[%lld]",
+	CA_DEBUG(0, "CAS DVR Decrypt[%d] (%p, %p, %#x), offset[%lld]",
 		 private_data->dvr_channelid,
 		 m2m_eng_conf.p_in,
 		 m2m_eng_conf.p_out,
@@ -1422,35 +1383,12 @@ static int vmx_dvr_decrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 			   p_vr_buffer,
 			   p_vr_buffer,
 			   vr_buffer_len);
-#else
-	memcpy(private_data->dvr_shm, (void *)cryptoPara->buf_in.addr, cryptoPara->buf_in.size);
-	memset(&shm_in, 0x0, sizeof(shm_r2r_t));
-	shm_in.magic = SHM_R2R_MAGIC;
-	shm_in.type = SHM_R2R_TYPE_REE;
-	shm_in.vaddr = private_data->dvr_shm;
-	shm_in.size = cryptoPara->buf_in.size;
-
-	memset(&shm_out, 0x0, sizeof(shm_r2r_t));
-	shm_out.magic = SHM_R2R_MAGIC;
-	shm_out.type = SHM_R2R_TYPE_SEC;
-	shm_out.paddr = (void *)cryptoPara->buf_out.addr;
-	shm_out.size = cryptoPara->buf_in.size;
-
-	CA_DEBUG(0, "CAS DVR Decrypt[%d] (%#x, %#x, %#x)",
-		private_data->dvr_channelid, shm_in.vaddr, shm_out.paddr, shm_in.size);
-
-	VMXCA_UpdateToREE(shm_in.paddr, shm_in.size);
-	rc = BC_DVRDecrypt(private_data->dvr_channelid,
-			(uint8_t *)&shm_out, (uint8_t *)&shm_in,
-			sizeof(shm_r2r_t));
-#endif
 	if (rc != k_BcSuccess) {
 		CA_DEBUG(0, "BC_DVRDecrypt failed, rc = %d", rc);
 		vmx_bc_unlock();
 		return -1;
 	}
 
-#ifdef USE_NEW_M2M_API
 	rc = VMXCA_PipelineM2MEngineRun(private_data->pipeline.handle,
 					&m2m_eng_conf);
 	if (rc) {
@@ -1459,11 +1397,6 @@ static int vmx_dvr_decrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 	cryptoPara->buf_out.size = m2m_eng_conf.out_len;
 	cryptoPara->buf_len = m2m_eng_conf.out_len;
 	CA_DEBUG(0, "DVR Decrypt out len:%#x\n", cryptoPara->buf_len);
-#else
-	//cryptoPara->buf_out.type = DVR_BUFFER_TYPE_SECURE;
-	cryptoPara->buf_out.size = shm_out.size;
-	cryptoPara->buf_len = shm_out.size;
-#endif
 
 	vmx_bc_unlock();
 	return 0;
@@ -1487,9 +1420,6 @@ static int vmx_dvr_replay(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 		return -1;
 	}
 
-#ifndef USE_NEW_M2M_API
-	private_data->dvr_shm = g_dvr_shm;
-#endif
 	if (!private_data->dat_fp) {
 		int location_len = 0;
 		char dat_fname[MAX_LOCATION_SIZE];
@@ -1531,7 +1461,6 @@ static int vmx_dvr_replay(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 				     &private_data->recinfolen,
 				     &private_data->blocksize);
 
-#ifdef USE_NEW_M2M_API
 		memset(&m2m_info, 0, sizeof(m2m_info_t));
 		m2m_info.engine_id = private_data->dvr_channelid;
 		m2m_info.hw_mode = 0;
@@ -1539,7 +1468,6 @@ static int vmx_dvr_replay(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 		if (rc) {
 			CA_DEBUG(2, "Replay Set M2M info failed\n");
 		}
-#endif
 		vmx_get_storeinfo(&private_data->storeinfo_ctx, cryptoPara->offset, &storeinfo);
 		memcpy(&private_data->cur_storeinfo, &storeinfo, sizeof(vmx_storeinfo_t));
 		rc = BC_DVRReplay(private_data->dvr_channelid, private_data->recinfo,
@@ -1593,12 +1521,6 @@ static int vmx_dvr_stop_replay(CasSession session)
 		return -1;
 	}
 
-#ifndef USE_NEW_M2M_API
-	if (private_data && private_data->dvr_shm) {
-		private_data->dvr_shm = NULL;
-	}
-#endif
-
 	free_service_idx(session, private_data->service_index);
 	free_dvr_channelid(channelid);
 	if (private_data->dat_fp) {
@@ -1620,6 +1542,7 @@ static SecMemHandle vmx_create_secmem(CasSession session, CA_SERVICE_TYPE_t type
 	int ret;
 	VMX_PrivateInfo_t *private_data;
 
+	UNUSED(type);
 	CA_DEBUG(1, "%s called\n", __func__);
 	private_data = (VMX_PrivateInfo_t *)((CAS_SessionInfo_t *)session)->private_data;
 	if (private_data->pipeline.mode == PIPELINE_MODE_LIVE
