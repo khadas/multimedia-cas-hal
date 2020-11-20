@@ -143,6 +143,11 @@ static int watermark_test_config(
 	uint8_t strength);
 static AM_RESULT cas_event_cb(CasSession session, char *json);
 static void video_callback(void *user_data, am_tsplayer_event *event);
+extern int ext_dvr_playback_stop(void);
+extern int ext_dvr_playback(const char *path, CasHandle cas_handle);
+extern int dvr_wrapper_set_playback_secure_buffer (DVR_WrapperPlayback_t playback,
+					    uint8_t *p_secure_buf,
+					    uint32_t len);
 
 static int fend_lock(int dev_no, int freqM)
 {
@@ -239,7 +244,6 @@ static void *inject_thread(void *arg)
 	return NULL;
     }
     while (gInjectRunning) {
-	int size;
         int retry = 100;
 	int kRwSize = 0;
         am_tsplayer_result res;
@@ -285,6 +289,7 @@ static AM_RESULT cas_event_cb(CasSession session, char *json)
     cJSON* type;
     cJSON* state;
 
+    UNUSED(session);
     INF("%s:%s\n", __func__, json);
     input = cJSON_Parse(json);
     if (input == NULL) {
@@ -357,7 +362,6 @@ static DVR_Result_t encrypt_callback(DVR_CryptoParams_t *params, void *userdata)
 static DVR_Result_t decrypt_callback(DVR_CryptoParams_t *params, void *userdata)
 {
     int ret;
-    CA_SERVICE_TYPE_t service_type = SERVICE_PVR_PLAY;
     UNUSED(userdata);
 
     AM_CA_CryptoPara_t *cryptoPara = (AM_CA_CryptoPara_t *)params;
@@ -599,7 +603,6 @@ static int start_liveplay(dvb_service_info_t *prog)
     am_tsplayer_avsync_mode avsyncmode = TS_SYNC_AMASTER;
 
     am_tsplayer_handle player_session;
-    AM_CA_ServiceInfo_t cas_para;
 
     INF("vpid:%#x vfmt:%d apid:%#x afmt:%d ecmpid:%#x emmpid:%#x scramble:%d\r\n",
         prog->i_video_pid, prog->i_vformat,
@@ -816,8 +819,8 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
 
 static int show_cardno(void)
 {
-    const cJSON *input = NULL;
-    const cJSON *item = NULL;
+    cJSON *input = NULL;
+    cJSON *item = NULL;
     char in_json[MAX_JSON_LEN];
     char out_json[MAX_JSON_LEN];
 
@@ -838,8 +841,8 @@ static int show_cardno(void)
 
 static int check_pin(char *pin, uint8_t pinIndex, uint8_t reason)
 {
-    const cJSON *input = NULL;
-    const cJSON *item = NULL;
+    cJSON *input = NULL;
+    cJSON *item = NULL;
     char in_json[MAX_JSON_LEN];
     char out_json[MAX_JSON_LEN];
 
@@ -867,8 +870,8 @@ static int check_pin(char *pin, uint8_t pinIndex, uint8_t reason)
 
 static int dvr_test_config(uint8_t algo)
 {
-    const cJSON *input = NULL;
-    const cJSON *item = NULL;
+    cJSON *input = NULL;
+    cJSON *item = NULL;
     char in_json[MAX_JSON_LEN];
     char out_json[MAX_JSON_LEN];
 
@@ -892,8 +895,8 @@ static int watermark_test_config(
 	uint8_t config,
 	uint8_t strength)
 {
-    const cJSON *input = NULL;
-    const cJSON *item = NULL;
+    cJSON *input = NULL;
+    cJSON *item = NULL;
     char in_json[MAX_JSON_LEN];
     char out_json[MAX_JSON_LEN];
 
@@ -930,8 +933,8 @@ static int output_control_test_config(
 	uint8_t cgmsa,
 	uint8_t emicci)
 {
-    const cJSON *input = NULL;
-    const cJSON *item = NULL;
+    cJSON *input = NULL;
+    cJSON *item = NULL;
     char in_json[MAX_JSON_LEN];
     char out_json[MAX_JSON_LEN];
 
@@ -961,8 +964,8 @@ static int output_control_test_config(
 
 static int svp_test_config(size_t addr)
 {
-    const cJSON *input = NULL;
-    const cJSON *item = NULL;
+    cJSON *input = NULL;
+    cJSON *item = NULL;
     char in_json[MAX_JSON_LEN];
     char out_json[MAX_JSON_LEN];
 
@@ -986,8 +989,8 @@ static int svp_test_config(size_t addr)
 
 static int antirollback_test_config(uint8_t flag)
 {
-    const cJSON *input = NULL;
-    const cJSON *item = NULL;
+    cJSON *input = NULL;
+    cJSON *item = NULL;
     char in_json[MAX_JSON_LEN];
     char out_json[MAX_JSON_LEN];
 
@@ -1011,11 +1014,11 @@ static int antirollback_test_config(uint8_t flag)
 
 static int ta2ta_test_config(
 	uint32_t clientid,
-	uint8_t *data,
+	const char *data,
 	uint32_t len)
 {
-    const cJSON *input = NULL;
-    const cJSON *item = NULL;
+    cJSON *input = NULL;
+    cJSON *item = NULL;
     char in_json[MAX_JSON_LEN];
     char out_json[MAX_JSON_LEN];
 
@@ -1282,7 +1285,7 @@ static int start_playback(void *params, int scrambled, int pause)
        play.dvr_session = (void *)player;
 
        if (scrambled) {
-           INF("cas playback set secure buffer:%#x, secure buffer size:%#x\n",
+           INF("cas playback set secure buffer:%p, secure buffer size:%#x\n",
                         sec_buf, sec_buf_size);
            dvr_wrapper_set_playback_secure_buffer(player, sec_buf, sec_buf_size);
        }
@@ -1495,8 +1498,6 @@ int main(int argc, char *argv[])
 
         start_playback(tspath, scrambled, 0);
     } else if (is_ext_playback(mode)) {
-	extern int ext_dvr_playback(const char *path, CasHandle cas_handle);
-
         INF("try to play file:%s\r\n", tspath);
 	dvb_set_demux_source(DMX_DEV_NO, DVB_DEMUX_SOURCE_DMA0);
         ext_dvr_playback(tspath, g_cas_handle);
@@ -1675,7 +1676,7 @@ int main(int argc, char *argv[])
 		    antirollback_test_config(flag);
 		}
 	    } else if (!strncmp(buf, "ta2ta", 5)) {
-		uint8_t *data = malloc(2048);
+		char *data = malloc(2048);
 		uint32_t len = 0;
 		uint32_t clientid;
 		uint32_t i;
