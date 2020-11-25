@@ -77,7 +77,8 @@
 
 #define VMX_CAS_STRING "Verimatrix"
 
-#define RECORD_BLOCK_SIZE (188*1024)//same to asyncfifo flush size, it's enc block size and dec block size//65424
+#define INJECT_LENGTH (188*1024)
+#define BLOCK_SIZE (188*1024)//same to asyncfifo flush size, it's enc block size and dec block size//65424
 
 #define DVR_STREAM_TYPE_TO_TYPE(_t) (((_t) >> 24) & 0xF)
 #define DVR_STREAM_TYPE_TO_FMT(_t)  ((_t) & 0xFFFFFF)
@@ -229,7 +230,6 @@ int init_tsplayer_inject(dvb_service_info_t *prog)
     return 0;
 }
 
-#define INJECT_LENGTH (188*1024)
 static void *inject_thread(void *arg)
 {
     int fd = -1;
@@ -353,7 +353,7 @@ static DVR_Result_t encrypt_callback(DVR_CryptoParams_t *params, void *userdata)
     }
 
     if (cryptoPara->buf_len) {
-	INF("%#x bytes encrypted\n", cryptoPara->buf_len);
+	//INF("%#x bytes encrypted\n", cryptoPara->buf_len);
     }
 
     return 0;
@@ -402,7 +402,7 @@ static DVR_Result_t RecEventHandler(DVR_RecordEvent_t event, void *params, void 
       switch (event)
       {
          case DVR_RECORD_EVENT_STATUS:
-            INF("Record event %d\n", status->state);
+            //INF("Record event %d\n", status->state);
             break;
          default:
             ERR("Unhandled recording event 0x%x from (%s)\n", event, (char *)userdata);
@@ -617,12 +617,6 @@ static int start_liveplay(dvb_service_info_t *prog)
 	INF("enalbe live TVP\n");
     }
 
-    if (param.drmmode != TS_INPUT_BUFFER_TYPE_NORMAL) {
-	if (play.cas_session) {
-		play.secmem_session = AM_CA_CreateSecmem(play.cas_session, SERVICE_LIVE_PLAY, NULL, NULL);
-        }
-    }
-
     ret = AmTsPlayer_create(param, &player_session);
     if (ret != AM_TSPLAYER_OK) {
         CA_DEBUG(0, "Create tslayer failed!!!! err:%x", ret);
@@ -724,7 +718,7 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
 
     if (prog->scrambled) {
         void *buf = NULL;
-        uint32_t secmem_size = 0;
+        uint32_t secmem_size = BLOCK_SIZE*20;
         SecMemHandle secmem_session;
 
         error = AM_CA_OpenSession(g_cas_handle, &recorder.cas_session, service_type);
@@ -1143,7 +1137,7 @@ static int start_playback(void *params, int scrambled, int pause)
     int error;
 
     void *sec_buf;
-    uint32_t sec_buf_size = 0;
+    uint32_t sec_buf_size = INJECT_LENGTH + 4*1024;
     CA_SERVICE_TYPE_t service_type = SERVICE_PVR_PLAY;
 
     memset(&play_params, 0, sizeof(play_params));
@@ -1265,7 +1259,7 @@ static int start_playback(void *params, int scrambled, int pause)
        INF( " TsPlayer set Workmode NORMAL %s, result(%d)\n", (result)? "FAIL" : "OK", result);
        //result = AmTsPlayer_setSyncMode(tsplayer_handle, TS_SYNC_NOSYNC );
        //PLAY_DBG(" TsPlayer set Syncmode FREERUN %s, result(%d)", (result)? "FAIL" : "OK", result);
-       result = AmTsPlayer_setSyncMode(tsplayer_handle, TS_SYNC_PCRMASTER );
+       result = AmTsPlayer_setSyncMode(tsplayer_handle, TS_SYNC_VMASTER );
        INF( " TsPlayer set Syncmode PCRMASTER %s, result(%d)\n", (result)? "FAIL" : "OK", result);
        play_params.playback_handle = (Playback_DeviceHandle_t)tsplayer_handle;
        play.player_session = tsplayer_handle;
@@ -1276,7 +1270,7 @@ static int start_playback(void *params, int scrambled, int pause)
         play_params.crypto_fn = decrypt_callback;
         play_params.crypto_data = NULL;
     }
-    play_params.block_size = RECORD_BLOCK_SIZE;
+    play_params.block_size = BLOCK_SIZE;
     error = dvr_wrapper_open_playback(&player, &play_params);
     if (!error)
     {
