@@ -1198,11 +1198,6 @@ static int vmx_dvr_encrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 	uint8_t *p_vr_buffer = NULL;
 	uint32_t vr_buffer_len = 0;
 
-	if (cryptoPara->buf_len > DVR_SIZE) {
-		CA_DEBUG(2, "encrypt buffer overflow %#x", block_size);
-		return -1;
-	}
-
 	vmx_bc_lock();
 	private_data = (VMX_PrivateInfo_t *)((CAS_SessionInfo_t *)session)->private_data;
 	aligned_buff_addr = (uint8_t *)((uint32_t)cryptoPara->buf_in.addr - private_data->wait_enc_len);
@@ -1334,11 +1329,6 @@ static int vmx_dvr_decrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 	uint8_t *p_vr_buffer = NULL;
 	uint32_t vr_buffer_len = 0;
 	m2m_engine_conf_t m2m_eng_conf;
-
-	if (cryptoPara->buf_len > DVR_SIZE) {
-		CA_DEBUG(2, "decrypt buffer overflow DVR_SIZE");
-		return -1;
-	}
 
 	vmx_bc_lock();
 	private_data = (VMX_PrivateInfo_t *)((CAS_SessionInfo_t *)session)->private_data;
