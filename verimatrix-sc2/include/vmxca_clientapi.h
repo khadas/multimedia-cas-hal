@@ -94,6 +94,7 @@ typedef struct {
 	uint8_t iv[16];           /* Some algorithms need update newly start IV */
 	uint32_t iv_len;          /* IV length, if NOT need, set to 0 */
 	m2m_usage_t usage;        /* M2M usage, see m2m_usage_t */
+	uint32_t magic;
 } m2m_engine_conf_t;
 
 typedef struct {
