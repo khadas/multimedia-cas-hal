@@ -14,7 +14,7 @@ typedef short (*TestCB_t)(
 TestCB_t g_testcb = NULL;
 void SYS_InstallTestCallback(TestCB_t cb)
 {
-	printf("%s %p\n", __func__, cb);
+	CA_DEBUG(0, "%s %p\n", __func__, cb);
 
 	if (cb) {
 		g_testcb = cb;
@@ -33,12 +33,12 @@ int dvr_test_config(uint8_t fromenv, uint8_t testcase)
 		bInfo = testcase;
 	}
 
-	printf("%s call cb dvr bInfo = %d\n", __func__, bInfo);
+	CA_DEBUG(0, "%s call cb dvr bInfo = %d\n", __func__, bInfo);
 	if (g_testcb) {
 		ret = g_testcb(0x1 /*dvr*/, bInfo, NULL, 0);
-		printf("cb ret=%d\n", ret);
+		CA_DEBUG(0, "cb ret=%d\n", ret);
 	} else {
-		printf("no test cb installed\n");
+		CA_DEBUG(0, "no test cb installed\n");
 	}
 
 	return ret;
@@ -65,7 +65,7 @@ int watermark_test_config(
 				sizeof(data));
 		CA_DEBUG(0, "videomark[%d] cb ret=%d\n", service_index, ret);
 	} else {
-		printf("no test cb installed\n");
+		CA_DEBUG(0, "no test cb installed\n");
 	}
 
 	return ret;
@@ -99,7 +99,7 @@ int output_control_test_config(
 	data.bEmiCci = emicci;
 
 	if (g_testcb) {
-		printf("output control onoff=%d hdcp=%d downresing=%#x \
+		CA_DEBUG(0, "output control onoff=%d hdcp=%d downresing=%#x \
 	bAnalogProtection=%#x bCgmsa=%#x bEmiCci=%#x\n",
 			data.bOnOff, data.bHdcp, data.bDownResing,
 			data.bAnalogProtection, data.bCgmsa, data.bEmiCci);
@@ -107,9 +107,9 @@ int output_control_test_config(
 				service_index,
 				(unsigned char*)&data,
 				sizeof(data));
-		printf("output control cb ret=%d\n", ret);
+		CA_DEBUG(0, "output control cb ret=%d\n", ret);
 	} else {
-		printf("no test cb installed\n");
+		CA_DEBUG(0, "no test cb installed\n");
 	}
 
 	return ret;
@@ -123,9 +123,9 @@ int secure_video_path_test(int service_index, uint8_t *paddr)
 		ret = g_testcb(0x05 /*svp*/,
 				service_index,
 				paddr, 0);
-		printf("secure video path test ret->%d\n");
+		CA_DEBUG(0, "secure video path test ret->%d\n");
 	} else {
-		printf("no test cb installed\n");
+		CA_DEBUG(0, "no test cb installed\n");
 	}
 
 	return ret;
@@ -137,16 +137,16 @@ int antirollback_test_config(unsigned char bInfo)
 	uint8_t data[16] = {0};
 
 	if (bInfo != 0 && bInfo != 1) {
-		printf("bad arg\n");
+		CA_DEBUG(1, "bad arg\n");
 		return ret;
 	}
 
 	if (g_testcb) {
-		printf("antirollback test config bInfo=%u\n", bInfo);
+		CA_DEBUG(0, "antirollback test config bInfo=%u\n", bInfo);
 		ret = g_testcb(0x3 /*arb*/, bInfo, &data[0], 0);
-		printf("antirollback test cb ret=%d\n", ret);
+		CA_DEBUG(0, "antirollback test cb ret=%d\n", ret);
 	} else {
-		printf("no test cb installed\n");
+		CA_DEBUG(0, "no test cb installed\n");
 	}
 
 	return ret;
@@ -164,11 +164,27 @@ int ta2ta_test_config(
 	}
 
 	if (g_testcb) {
-		printf("ta2ta test config clientid=%u len=%u\n", clientid, len);
+		CA_DEBUG(0, "ta2ta test config clientid=%u len=%u\n", clientid, len);
 		ret = g_testcb(0x6 /*ta2ta*/, clientid, data, len);
-		printf("ta2ta test cb ret=%d\n", ret);
+		CA_DEBUG(0, "ta2ta test cb ret=%d\n", ret);
 	} else {
-		printf("no test cb installed\n");
+		CA_DEBUG(0, "no test cb installed\n");
+	}
+
+	return ret;
+}
+
+int hdcp_test_config(int service_idx)
+{
+	int ret = -1;
+	char bInfo = service_idx;
+
+	CA_DEBUG(0, "hdcp test config service_idx=%d\n", service_idx);
+	if (g_testcb) {
+		ret = g_testcb(0x4 /*hdcp*/, bInfo, NULL, 0);
+		CA_DEBUG(0, "cb ret=%d\n", ret);
+	} else {
+		CA_DEBUG(0, "no test cb installed\n");
 	}
 
 	return ret;

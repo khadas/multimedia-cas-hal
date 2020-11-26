@@ -1038,6 +1038,30 @@ static int ta2ta_test_config(
     return 0;
 }
 
+static int hdcp_test_config(uint8_t svc_idx)
+{
+    cJSON *input = NULL;
+    cJSON *item = NULL;
+    char in_json[MAX_JSON_LEN];
+    char out_json[MAX_JSON_LEN];
+
+    input = cJSON_CreateObject();
+    item = cJSON_CreateString(VMX_CAS_STRING);
+    cJSON_AddItemToObject(input, ITEM_CAS, item);
+    item = cJSON_CreateString(ITEM_HDCP);
+    cJSON_AddItemToObject(input, ITEM_CMD, item);
+    item = cJSON_CreateNumber(svc_idx);
+    cJSON_AddItemToObject(input, ITEM_SERVICE_INDEX, item);
+
+    cJSON_PrintPreallocated(input, in_json, MAX_JSON_LEN, 1);
+    INF("in_json:\n%s\n", in_json);
+    if (play.cas_session) {
+	AM_CA_Ioctl(play.cas_session, in_json, out_json, MAX_JSON_LEN);
+    }
+    INF("out_json:\n%s\n", out_json);
+
+    return 0;
+}
 static int stop_recording(int dev_no)
 {
     int ret;
@@ -1519,6 +1543,7 @@ int main(int argc, char *argv[])
 	INF( "* oc <value> [<AnalogProtection> <Cgmsa> <Emicci>]\n");
 	INF( "* pin <pin> <pinIdx> <reason>\n");
 	INF( "* wm <on> <config> <strength>\n");
+	INF( "* hdcp\n");
 	INF( "* ta2ta <client id> <ascii input data>\n");
 	INF( "* arb <0>/<1>\n");
         INF( "* quit\n" );
@@ -1694,6 +1719,10 @@ int main(int argc, char *argv[])
 		}
 		if (data)
 		    free(data);
+	    } else if (!strncmp(buf, "hdcp", 4)) {
+		    uint8_t svc_idx = 0;
+		    ret = sscanf(buf, "hdcp %hhu", &svc_idx);
+		    hdcp_test_config(svc_idx);
 	    }
         }
     };

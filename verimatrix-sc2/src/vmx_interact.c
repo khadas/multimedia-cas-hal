@@ -503,7 +503,7 @@ int16_t  MMI_SetDescrambling_State( uint16_t wIndex,
 
 int vmx_interact_ioctl(CasSession session, const char *in_json, char *out_json, uint32_t out_len)
 {
-	int ret = -1;
+	int ret = 0;
 	int item = 0;
 	int service_idx = 0;
 	cJSON *input = NULL;
@@ -518,7 +518,6 @@ int vmx_interact_ioctl(CasSession session, const char *in_json, char *out_json, 
 		const char *error_ptr = cJSON_GetErrorPtr();
 		if (error_ptr) {
 			CA_DEBUG(1, "%s, Error before: %s\n", __func__, error_ptr);
-			\
 			ret = -1;
 			goto end;
 		}
@@ -565,9 +564,6 @@ int vmx_interact_ioctl(CasSession session, const char *in_json, char *out_json, 
 		jsons[item].type = cJSON_String;
 		jsons[item].key = ITEM_CARDNO;
 		jsons[item++].valuestring = ser;
-		jsons[item].type = cJSON_Number;
-		jsons[item].key = ITEM_ERROR_CODE;
-		jsons[item++].valuedouble = ret;
 	} else if (!strcmp(cmd->valuestring, ITEM_GETVERSION)) {
 		uint8_t version[32];
 		uint8_t date[20];
@@ -588,7 +584,6 @@ int vmx_interact_ioctl(CasSession session, const char *in_json, char *out_json, 
 		jsons[item].type = cJSON_String;
 		jsons[item].key = ITEM_TIME;
 		jsons[item++].valuestring = timestr;
-		ret = 0;
 	} else if (!strcmp(cmd->valuestring, ITEM_CHECK_PIN)) {
 		int i;
 		uint8_t pinbcd[16];
@@ -621,9 +616,6 @@ int vmx_interact_ioctl(CasSession session, const char *in_json, char *out_json, 
 		jsons[item].type = cJSON_String;
 		jsons[item].key = ITEM_TYPE;
 		jsons[item++].valuestring = ITEM_CHECK_PIN;
-		jsons[item].type = cJSON_Number;
-		jsons[item].key = ITEM_ERROR_CODE;
-		jsons[item++].valuedouble = ret;
 	} else if (!strcmp(cmd->valuestring, ITEM_CHANGE_PIN)) {
 		cJSON *oldPin, *oldPinLen, *newPin, *newPinLen, *pinIndex;
 
@@ -653,9 +645,6 @@ int vmx_interact_ioctl(CasSession session, const char *in_json, char *out_json, 
 		jsons[item].type = cJSON_String;
 		jsons[item].key = ITEM_TYPE;
 		jsons[item++].valuestring = ITEM_CHANGE_PIN;
-		jsons[item].type = cJSON_Number;
-		jsons[item].key = ITEM_ERROR_CODE;
-		jsons[item++].valuedouble = ret;
 	} else if (!strcmp(cmd->valuestring, ITEM_GET_PURSE)) {
 		BC_GetPurse(get_purse);
 		jsons[item].type = cJSON_String;
@@ -687,9 +676,6 @@ int vmx_interact_ioctl(CasSession session, const char *in_json, char *out_json, 
 		jsons[item].type = cJSON_String;
 		jsons[item].key = ITEM_TYPE;
 		jsons[item++].valuestring = ITEM_WATERMARK;
-		jsons[item].type = cJSON_Number;
-		jsons[item].key = ITEM_ERROR_CODE;
-		jsons[item++].valuedouble = ret;
 	} else if (!strcmp(cmd->valuestring, ITEM_OUTPUT_CONTROL)) {
 		cJSON *flag, *analog, *cgmsa, *emicci;
 
@@ -719,9 +705,6 @@ int vmx_interact_ioctl(CasSession session, const char *in_json, char *out_json, 
 		jsons[item].type = cJSON_String;
 		jsons[item].key = ITEM_TYPE;
 		jsons[item++].valuestring = ITEM_OUTPUT_CONTROL;
-		jsons[item].type = cJSON_Number;
-		jsons[item].key = ITEM_ERROR_CODE;
-		jsons[item++].valuedouble = ret;
 	} else if (!strcmp(cmd->valuestring, ITEM_SVP)) {
 		cJSON *addr;
 
@@ -735,9 +718,6 @@ int vmx_interact_ioctl(CasSession session, const char *in_json, char *out_json, 
 		jsons[item].type = cJSON_String;
 		jsons[item].key = ITEM_TYPE;
 		jsons[item++].valuestring = ITEM_SVP;
-		jsons[item].type = cJSON_Number;
-		jsons[item].key = ITEM_ERROR_CODE;
-		jsons[item++].valuedouble = ret;
 	} else if (!strcmp(cmd->valuestring, ITEM_SET_ALGO)) {
 		cJSON *algo;
 
@@ -752,9 +732,6 @@ int vmx_interact_ioctl(CasSession session, const char *in_json, char *out_json, 
 		jsons[item].type = cJSON_String;
 		jsons[item].key = ITEM_TYPE;
 		jsons[item++].valuestring = ITEM_SET_ALGO;
-		jsons[item].type = cJSON_Number;
-		jsons[item].key = ITEM_ERROR_CODE;
-		jsons[item++].valuedouble = ret;
 	} else if (!strcmp(cmd->valuestring, ITEM_ARB)) {
 		cJSON *flag;
 
@@ -768,9 +745,6 @@ int vmx_interact_ioctl(CasSession session, const char *in_json, char *out_json, 
 		jsons[item].type = cJSON_String;
 		jsons[item].key = ITEM_TYPE;
 		jsons[item++].valuestring = ITEM_ARB;
-		jsons[item].type = cJSON_Number;
-		jsons[item].key = ITEM_ERROR_CODE;
-		jsons[item++].valuedouble = ret;
 	} else if (!strcmp(cmd->valuestring, ITEM_TA2TA)) {
 		cJSON *clientid, *data, *len;
 
@@ -795,14 +769,25 @@ int vmx_interact_ioctl(CasSession session, const char *in_json, char *out_json, 
 		jsons[item].type = cJSON_String;
 		jsons[item].key = ITEM_TYPE;
 		jsons[item++].valuestring = ITEM_TA2TA;
-		jsons[item].type = cJSON_Number;
-		jsons[item].key = ITEM_ERROR_CODE;
-		jsons[item++].valuedouble = ret;
+	} else if (!strcmp(cmd->valuestring, ITEM_HDCP)){
+		cJSON *svc_idx;
+
+		svc_idx = cJSON_GetObjectItem(input, ITEM_SERVICE_INDEX);
+		if (!cJSON_IsNumber(svc_idx)) {
+			goto end;
+		}
+		ret = hdcp_test_config(svc_idx->valueint);
+		jsons[item].type = cJSON_String;
+		jsons[item].key = ITEM_TYPE;
+		jsons[item++].valuestring = ITEM_HDCP;
 	} else {
 		CA_DEBUG(1, "%s unknown cmd: %s", __func__, cmd->valuestring);
 		goto end;
 	}
 
+	jsons[item].type = cJSON_Number;
+	jsons[item].key = ITEM_ERROR_CODE;
+	jsons[item++].valuedouble = ret;
 	json_object = wrapper_cJSON_Create(jsons, item, out_json);
 	if (json_object) {
 		wrapper_cJSON_Delete(json_object);

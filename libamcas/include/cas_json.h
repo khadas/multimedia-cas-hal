@@ -77,5 +77,7 @@
 #define ITEM_SET_ALGO           "SetAlgo"
 #define ITEM_ALGO               "algo"
 
+#define ITEM_HDCP		"hdcp"
+
 #define MAX_JSON_LEN (1024)
 
