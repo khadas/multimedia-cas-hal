@@ -399,6 +399,7 @@ static DVR_Result_t RecEventHandler(DVR_RecordEvent_t event, void *params, void 
    {
       DVR_WrapperRecordStatus_t *status = (DVR_WrapperRecordStatus_t *)params;
 
+      UNUSED(status);
       switch (event)
       {
          case DVR_RECORD_EVENT_STATUS:
@@ -824,11 +825,19 @@ static int show_cardno(void)
     item = cJSON_CreateString(ITEM_GETSCNO);
     cJSON_AddItemToObject(input, ITEM_CMD, item);
     cJSON_PrintPreallocated(input, in_json, MAX_JSON_LEN, 1);
-    INF( "in_json:\n%s\n", in_json);
-    if (play.cas_session) {
-	AM_CA_Ioctl(play.cas_session, in_json, out_json, MAX_JSON_LEN);
-	INF( "out_json:\n%s\n", out_json);
+    AM_CA_Ioctl(play.cas_session, in_json, out_json, MAX_JSON_LEN);
+    cJSON_Delete(input);
+
+    input = cJSON_Parse(out_json);
+    item = cJSON_GetObjectItemCaseSensitive(input, ITEM_CARDNO);
+    if (!cJSON_IsString(item) || item->valuestring[0] == '\0') {
+	    cJSON_Delete(input);
+	    INF("Get card no failed\n");
+	    return -1;
     }
+
+    INF("cardno:%s\n", item->valuestring);
+    cJSON_Delete(input);
 
     return 0;
 }
@@ -1447,6 +1456,12 @@ int main(int argc, char *argv[])
     INF("@@@in cas_hal_test mode = %d\n", mode);
 
     dvb_init();
+    while (1) {
+	if (!show_cardno()) {
+	    break;
+	}
+	sleep(1);
+    };
 
     if (is_live(mode) || is_live_local(mode)) {
 	if (is_live(mode)) {
