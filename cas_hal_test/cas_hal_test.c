@@ -100,6 +100,14 @@ struct vm_config_t {
     uint8_t strength;
 } g_vm_config = {0};
 
+struct oc_config_t {
+    uint8_t run;
+    uint32_t flag;
+    uint8_t analog;
+    uint8_t cgmsa;
+    uint8_t emicci;
+} g_oc_config = {0};
+
 typedef struct
 {
     CasSession cas_session;
@@ -142,6 +150,11 @@ static int watermark_test_config(
 	uint8_t on,
 	uint8_t config,
 	uint8_t strength);
+static int output_control_test_config(
+	uint32_t flag,
+	uint8_t analog,
+	uint8_t cgmsa,
+	uint8_t emicci);
 static AM_RESULT cas_event_cb(CasSession session, char *json);
 static void video_callback(void *user_data, am_tsplayer_event *event);
 extern int ext_dvr_playback_stop(void);
@@ -729,11 +742,19 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
             return -1;
         }
 
-			    if (g_vm_config.run) {
-				watermark_test_config(g_vm_config.on,
-						      g_vm_config.config,
-						      g_vm_config.strength);
-			    }
+	if (g_vm_config.run) {
+		watermark_test_config(g_vm_config.on,
+		g_vm_config.config,
+		g_vm_config.strength);
+	}
+
+	if (g_oc_config.run) {
+		output_control_test_config(g_oc_config.flag,
+					   g_oc_config.analog,
+					   g_oc_config.cgmsa,
+					   g_oc_config.emicci);
+	}
+
         secmem_session = AM_CA_CreateSecmem(
 			recorder.cas_session,
 			SERVICE_PVR_RECORDING,
@@ -958,7 +979,12 @@ static int output_control_test_config(
     cJSON_PrintPreallocated(input, in_json, MAX_JSON_LEN, 1);
     INF("in_json:\n%s\n", in_json);
     if (has_live(mode) && play.cas_session) {
+	INF("has live\n");
 	AM_CA_Ioctl(play.cas_session, in_json, out_json, MAX_JSON_LEN);
+    }
+    if (recorder.cas_session) {
+	INF("has recording\n");
+	AM_CA_Ioctl(recorder.cas_session, in_json, out_json, MAX_JSON_LEN);
     }
     INF("out_json:\n%s\n", out_json);
 
@@ -1687,6 +1713,11 @@ int main(int argc, char *argv[])
 		uint8_t analog = 0, cgmsa = 0, emicci = 0;
 		ret = sscanf(buf, "oc %u %hhu %hhu %hhu", &flag, &analog, &cgmsa, &emicci);
 		if (ret >= 1) {
+		    g_oc_config.run = 1;
+		    g_oc_config.flag = flag;
+		    g_oc_config.analog = analog;
+		    g_oc_config.cgmsa = cgmsa;
+		    g_oc_config.emicci = emicci;
 		    output_control_test_config(flag, analog, cgmsa, emicci);
 		}
 	    } else if (!strncmp(buf, "pin", 3)) {
