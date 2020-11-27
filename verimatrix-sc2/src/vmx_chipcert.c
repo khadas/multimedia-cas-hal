@@ -99,9 +99,8 @@ int output_control_test_config(
 	data.bEmiCci = emicci;
 
 	if (g_testcb) {
-		CA_DEBUG(0, "output control onoff=%d hdcp=%d downresing=%#x \
-	bAnalogProtection=%#x bCgmsa=%#x bEmiCci=%#x\n",
-			data.bOnOff, data.bHdcp, data.bDownResing,
+		CA_DEBUG(0, "outputcontrol[%d] onoff=%d hdcp=%d downresing=%#x bAnalogProtection=%#x bCgmsa=%#x bEmiCci=%#x\n",
+			service_index, data.bOnOff, data.bHdcp, data.bDownResing,
 			data.bAnalogProtection, data.bCgmsa, data.bEmiCci);
 		ret = g_testcb(0x0 /*output control*/,
 				service_index,
@@ -123,7 +122,7 @@ int secure_video_path_test(int service_index, uint8_t *paddr)
 		ret = g_testcb(0x05 /*svp*/,
 				service_index,
 				paddr, 0);
-		CA_DEBUG(0, "secure video path test ret->%d\n");
+		CA_DEBUG(0, "secure video path test ret->%d\n", ret);
 	} else {
 		CA_DEBUG(0, "no test cb installed\n");
 	}
