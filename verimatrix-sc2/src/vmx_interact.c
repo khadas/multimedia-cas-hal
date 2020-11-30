@@ -548,14 +548,14 @@ int vmx_interact_ioctl(CasSession session, const char *in_json, char *out_json, 
 	if (out_len < MAX_JSON_LEN) {
 		CA_DEBUG(1, "%s out_json maybe overflow %#x", out_len);
 	}
+
+	vmx_bc_lock();
 	if (!strcmp(cmd->valuestring, ITEM_GETSCNO)) {
 		uint8_t ser[35] = {0};
 		uint16_t serlen = sizeof(ser);
 		cJSON *cardno = NULL;
 
-		vmx_bc_lock();
 		ret = BC_GetSCNo(ser, serlen);
-		vmx_bc_unlock();
 		CA_DEBUG(0, "BC_GetSCNo ret=%d, serial number:%s\n\n", ret, ser);
 
 		jsons[item].type = cJSON_String;
@@ -601,14 +601,12 @@ int vmx_interact_ioctl(CasSession session, const char *in_json, char *out_json, 
 		if (!cJSON_IsNumber(reason)) {
 			goto end;
 		}
-		vmx_bc_lock();
 		for (i = 0; i < strlen(pin->valuestring); i++) {
 			pinbcd[i] = pin->valuestring[i] - '0';
 		}
 		ret = BC_CheckPin(strlen(pin->valuestring), pinbcd,
 				  pinIndex->valueint, reason->valueint, service_idx);
 
-		vmx_bc_unlock();
 		CA_DEBUG(1, "BC_CheckPin ret:%d. len:%d, pin:%s, pinIndex:%d, reason:%d, svc_idx:%d",
 			ret, strlen(pin->valuestring), pin->valuestring,
 			pinIndex->valueint, reason->valueint, service_idx);
@@ -666,12 +664,10 @@ int vmx_interact_ioctl(CasSession session, const char *in_json, char *out_json, 
 			goto end;
 		}
 
-		vmx_bc_lock();
 		ret = watermark_test_config(service_idx,
 				on->valueint,
 				config->valueint,
 				strength->valueint);
-		vmx_bc_unlock();
 
 		jsons[item].type = cJSON_String;
 		jsons[item].key = ITEM_TYPE;
@@ -801,5 +797,6 @@ end:
 	if (input) {
 		cJSON_Delete(input);
 	}
+	vmx_bc_unlock();
 	return ret;
 }
