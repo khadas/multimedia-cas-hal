@@ -789,7 +789,7 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
             cas_para.dmx_dev = DMX_DEV_NO;
         }
 
-        cas_para.service_id = prog->i_service_num;
+        cas_para.service_id = prog->i_program_num;
         cas_para.service_type = SERVICE_PVR_RECORDING;
         cas_para.ecm_pid = prog->i_ecm_pid[0];
         cas_para.stream_pids[0] = prog->i_video_pid;

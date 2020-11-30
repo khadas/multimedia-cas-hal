@@ -21,7 +21,6 @@ typedef struct dvb_service_info_s {
     uint8_t			private_data[16];
 
     uint8_t                     i_service_index;
-    uint16_t                    i_service_num;
     uint16_t                    i_desc_num;
     uint16_t                    i_ecm_pid[3];
     uint8_t                     i_aformat;
