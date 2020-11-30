@@ -1126,7 +1126,6 @@ static int vmx_dvr_start(CasSession session, AM_CA_ServiceInfo_t *service_info)
 		channelid, recinfo.len);
 
 	rc = BC_DVRRecord(private_data->service_index, channelid, recinfo.info, recinfo.len, dvbtime);
-	vmx_bc_unlock();
 	if (rc != k_BcSuccess) {
 		CA_DEBUG(2, "BC_DVRRecord faild, rc = %d", rc);
 		vmx_bc_unlock();
@@ -1134,7 +1133,6 @@ static int vmx_dvr_start(CasSession session, AM_CA_ServiceInfo_t *service_info)
 		return -1;
 	}
 
-	vmx_bc_lock();
 	memset(&m2m_info, 0, sizeof(m2m_info_t));
 	m2m_info.engine_id = private_data->dvr_channelid;
 	m2m_info.hw_mode = 0;
