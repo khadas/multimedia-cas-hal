@@ -100,8 +100,14 @@ typedef struct {
 typedef struct {
 	uint32_t magic;           /* DASH_CENC_MAGIC */
 	uint32_t subsample_count; /* The subsample count, max to MAX_SUBSAMPLE_COUNT */
-	uint32_t subsample_map[2 * MAX_SUBSAMPLE_COUNT]; /* Clear-encrypted lenght pair */
+	uint32_t subsample_map[2 * MAX_SUBSAMPLE_COUNT]; /* Clear-encrypted lengh pair */
 } dash_cenc_header_t;
+
+typedef struct {
+	uint8_t *p;               /* M2M buffer */
+	uint32_t len;             /* M2M buffer length */
+	uint8_t is_secure;        /* M2M buffer is secure buffer or not */
+} m2m_buffer_t;
 
 /*
  * brief: Initialalize VMX CA client.
@@ -399,12 +405,15 @@ vmxca_result_t VMXCA_PipelineSetDashMode( pipeline_handle_t ott_handle,
 vmxca_result_t VMXCA_PipelineM2MEngineRun(pipeline_handle_t m2m_handle,
 	m2m_engine_conf_t *p_conf);
 
-
 /*
- * brief: Get VirwRight library pad buffer, used for padding ViewRight M2M crypto
+ * brief: Get VirwRight library input padding buffer, used for padding ViewRight M2M crypto
  * function.
  *
- * @param [out] p_buffer: The ViewRight pad buffer
+ * @param [in] engigne_id: M2M engine ID, for DVR it's channel ID
+ *
+ * @param [in] p_m2m_buf: M2M input buffer
+ *
+ * @param [out] p_buffer: The ViewRight input padding buffer
  *
  * @param [out] p_len: The ViewRight pad buffer length
  *
@@ -412,6 +421,26 @@ vmxca_result_t VMXCA_PipelineM2MEngineRun(pipeline_handle_t m2m_handle,
  *
  * @retval other values: Failed
  */
-vmxca_result_t VMXCA_GetViewRightPadBuffer(uint8_t **p_buffer, uint32_t *p_len);
+vmxca_result_t VMXCA_GetViewRightInputPadBuffer(uint8_t engine_id,
+	m2m_buffer_t *p_m2m_buf, uint8_t **p_buffer, uint32_t *p_len);
+
+/*
+ * brief: Get VirwRight library output padding buffer, used for padding ViewRight M2M crypto
+ * function.
+ *
+ * @param [in] engigne_id: M2M engine ID, for DVR it's channel ID
+ *
+ * @param [in] p_m2m_buf: M2M output buffer
+ *
+ * @param [out] p_buffer: The ViewRight output padding buffer
+ *
+ * @param [out] p_len: The ViewRight pad buffer length
+ *
+ * @retval 0: Success
+ *
+ * @retval other values: Failed
+ */
+vmxca_result_t VMXCA_GetViewRightOutputPadBuffer(uint8_t engine_id,
+	m2m_buffer_t *p_m2m_buf, uint8_t **p_buffer, uint32_t *p_len);
 
 #endif //end VMXCA_CACLIENTAPI_H

@@ -1193,8 +1193,10 @@ static int vmx_dvr_encrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 	uint32_t block_size = DVR_SIZE;
 	vmxca_result_t result;
 	m2m_engine_conf_t m2m_eng_conf;
-	uint8_t *p_vr_buffer = NULL;
+	uint8_t *p_vr_input_buffer = NULL;
+	uint8_t *p_vr_output_buffer = NULL;
 	uint32_t vr_buffer_len = 0;
+	m2m_buffer_t m2m_buf;
 
 	vmx_bc_lock();
 	private_data = (VMX_PrivateInfo_t *)((CAS_SessionInfo_t *)session)->private_data;
@@ -1270,14 +1272,24 @@ static int vmx_dvr_encrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 	m2m_eng_conf.out_len = cryptoPara->buf_out.size;
 	m2m_eng_conf.usage = M2M_ENGINE_USAGE_RECORD;
 
-	result = VMXCA_GetViewRightPadBuffer(&p_vr_buffer, &vr_buffer_len);
-	CA_DEBUG(0, "crypto vr:%p, len:%#x", p_vr_buffer, vr_buffer_len);
+	memset(&m2m_buf, 0, sizeof(m2m_buf));
+	m2m_buf.p = m2m_eng_conf.p_in;
+	m2m_buf.len = m2m_eng_conf.in_len;
+	m2m_buf.is_secure = 1;
+	result = VMXCA_GetViewRightInputPadBuffer(channelid, &m2m_buf, &p_vr_input_buffer, &vr_buffer_len);
+
+	m2m_buf.p = m2m_eng_conf.p_out;
+	m2m_buf.len = m2m_eng_conf.out_len;
+	m2m_buf.is_secure = 0;
+	result = VMXCA_GetViewRightOutputPadBuffer(channelid, &m2m_buf, &p_vr_output_buffer, &vr_buffer_len);
+	CA_DEBUG(0, "crypto vr_input:%p, vr_out:%p, len:%#x, ret:%#x", p_vr_input_buffer,
+			p_vr_output_buffer, vr_buffer_len, result);
 	CA_DEBUG(0, "crypto [iaddr:%p, size:%#x] [oaddr:%p, size:%#x]",
                 m2m_eng_conf.p_in, m2m_eng_conf.in_len,
                 m2m_eng_conf.p_out, m2m_eng_conf.out_len);
 
-	rc = BC_DVREncrypt(channelid, p_vr_buffer,
-			p_vr_buffer, vr_buffer_len,
+	rc = BC_DVREncrypt(channelid, p_vr_output_buffer,
+			p_vr_input_buffer, vr_buffer_len,
 			storeinfo.info, &storeinfo.len);
 
 	if (rc != k_BcSuccess) {
@@ -1324,12 +1336,30 @@ static int vmx_dvr_decrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 	VMX_PrivateInfo_t * private_data;
 	uint8_t dvbtime[5];
 	vmx_storeinfo_t storeinfo;
-	uint8_t *p_vr_buffer = NULL;
+	uint8_t *p_vr_input_buffer = NULL;
+	uint8_t *p_vr_output_buffer = NULL;
 	uint32_t vr_buffer_len = 0;
 	m2m_engine_conf_t m2m_eng_conf;
+	m2m_buffer_t m2m_buf;
+	vmxca_result_t result;
 
 	vmx_bc_lock();
 	private_data = (VMX_PrivateInfo_t *)((CAS_SessionInfo_t *)session)->private_data;
+
+	memset(&m2m_buf, 0, sizeof(m2m_buf));
+	m2m_buf.p = (uint8_t *)cryptoPara->buf_in.addr;
+	m2m_buf.len = cryptoPara->buf_in.size;
+	m2m_buf.is_secure = 0;
+	result = VMXCA_GetViewRightInputPadBuffer(private_data->dvr_channelid,
+			&m2m_buf, &p_vr_input_buffer, &vr_buffer_len);
+
+	m2m_buf.p = (uint8_t *)cryptoPara->buf_out.addr;
+	m2m_buf.len = cryptoPara->buf_out.size;
+	m2m_buf.is_secure = 1;
+	result = VMXCA_GetViewRightOutputPadBuffer(private_data->dvr_channelid,
+			&m2m_buf, &p_vr_output_buffer, &vr_buffer_len);
+	CA_DEBUG(0, ">> crypto vr_input:%p, vr_out:%p, len:%#x, ret:%#x", p_vr_input_buffer,
+			p_vr_output_buffer, vr_buffer_len, result);
 
 	memset(&storeinfo, 0, sizeof(vmx_storeinfo_t));
 	vmx_get_storeinfo(&private_data->storeinfo_ctx, cryptoPara->offset, &storeinfo);
@@ -1359,7 +1389,6 @@ static int vmx_dvr_decrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 	m2m_eng_conf.out_len = cryptoPara->buf_out.size;
 	m2m_eng_conf.usage = M2M_ENGINE_USAGE_PLAYBACK;
 
-	rc = VMXCA_GetViewRightPadBuffer(&p_vr_buffer, &vr_buffer_len);
 	CA_DEBUG(0, "CAS DVR Decrypt[%d] (%p, %p, %#x), offset[%lld]",
 		 private_data->dvr_channelid,
 		 m2m_eng_conf.p_in,
@@ -1368,8 +1397,8 @@ static int vmx_dvr_decrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 		 cryptoPara->offset);
 
 	rc = BC_DVRDecrypt(private_data->dvr_channelid,
-			   p_vr_buffer,
-			   p_vr_buffer,
+			   p_vr_output_buffer,
+			   p_vr_input_buffer,
 			   vr_buffer_len);
 	if (rc != k_BcSuccess) {
 		CA_DEBUG(0, "BC_DVRDecrypt failed, rc = %d", rc);
@@ -1397,6 +1426,11 @@ static int vmx_dvr_replay(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 	vmx_storeinfo_t storeinfo;
 	VMX_PrivateInfo_t *private_data;
 	m2m_info_t m2m_info;
+	uint8_t *p_vr_input_buffer = NULL;
+	uint8_t *p_vr_output_buffer = NULL;
+	uint32_t vr_buffer_len = 0;
+	m2m_buffer_t m2m_buf;
+	vmxca_result_t result;
 
 	vmx_bc_lock();
 	memset(&storeinfo, 0, sizeof(vmx_storeinfo_t));
@@ -1456,6 +1490,29 @@ static int vmx_dvr_replay(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 		if (rc) {
 			CA_DEBUG(2, "Replay Set M2M info failed\n");
 		}
+
+		{
+			/*
+			 * When DVR replay, VMX library call Check SVP before SEC_M2M_Steup, vmx call 
+			 * sequence is wrong, but they don't want change. So we add this workaround code,
+			 * sync secure buffer with R2R engine index before replay
+			 * */
+			memset(&m2m_buf, 0, sizeof(m2m_buf));
+			m2m_buf.p = (uint8_t *)cryptoPara->buf_in.addr;
+			m2m_buf.len = cryptoPara->buf_in.size;
+			m2m_buf.is_secure = 0;
+			result = VMXCA_GetViewRightInputPadBuffer(private_data->dvr_channelid,
+					&m2m_buf, &p_vr_input_buffer, &vr_buffer_len);
+
+			m2m_buf.p = (uint8_t *)cryptoPara->buf_out.addr;
+			m2m_buf.len = cryptoPara->buf_out.size;
+			m2m_buf.is_secure = 1;
+			result = VMXCA_GetViewRightOutputPadBuffer(private_data->dvr_channelid,
+					&m2m_buf, &p_vr_output_buffer, &vr_buffer_len);
+			CA_DEBUG(0, "@@ Replay crypto vr_input:%p, vr_out:%p, len:%#x, ret:%#x", p_vr_input_buffer,
+					p_vr_output_buffer, vr_buffer_len, result);
+		}
+
 		vmx_get_storeinfo(&private_data->storeinfo_ctx, cryptoPara->offset, &storeinfo);
 		memcpy(&private_data->cur_storeinfo, &storeinfo, sizeof(vmx_storeinfo_t));
 		rc = BC_DVRReplay(private_data->dvr_channelid, private_data->recinfo,
