@@ -29,6 +29,7 @@
 #include "am_cas.h"
 #include "am_cas_internal.h"
 
+#define INDIV_AUTO
 #define DSC_DEV_COUNT (2)
 #define DMX_DEV_COUNT (3)
 #define DVR_SIZE (188*1024)
