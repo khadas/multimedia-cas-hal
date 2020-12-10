@@ -692,11 +692,11 @@ static int vmx_pre_init(void)
 	}
 	CA_DEBUG(0, "stat %s, ret:%d", path, bcRet);
 #endif
+	vmx_bc_lock();
 	VMXCA_Init();
 	vmx_port_init();
 	am_smc_init();
 
-	vmx_bc_lock();
 	bcRet = BC_Init();
 	CA_DEBUG(0, "BC-Init: %04x\n", (uint16_t)bcRet);
 
@@ -730,8 +730,10 @@ static int vmx_term(CasHandle handle)
 {
 	UNUSED(handle);
 
+	vmx_bc_lock();
 	VMXCA_UnInit();
 	vmx_port_deinit();
+	vmx_bc_unlock();
 	pthread_join(bcThread, NULL);
 
 	return 0;
@@ -762,6 +764,8 @@ static int vmx_open_session(CasHandle handle, CasSession session, CA_SERVICE_TYP
 	pipeline_handle_t pipeline_handle = -1;
 
 	UNUSED(handle);
+
+	vmx_bc_lock();
 	switch (service_type) {
 	case SERVICE_LIVE_PLAY:
 		pipeline_param.mode = PIPELINE_MODE_LIVE;
@@ -784,6 +788,7 @@ static int vmx_open_session(CasHandle handle, CasSession session, CA_SERVICE_TYP
 	if (ret != VMXCA_SUCCESS) {
 		CA_DEBUG(1, "%s create pipeline %d failed, ret:%d\n",
 			__func__, pipeline_param.mode, ret);
+		vmx_bc_unlock();
 		return -1;
 	}
 
@@ -800,6 +805,7 @@ static int vmx_open_session(CasHandle handle, CasSession session, CA_SERVICE_TYP
 
 	((CAS_SessionInfo_t *)session)->private_data = private_data;
 	((CAS_SessionInfo_t *)session)->service_info.service_type = service_type;
+	vmx_bc_unlock();
 
 	return 0;
 }
@@ -808,6 +814,7 @@ static int vmx_close_session(CasSession session)
 {
 	VMX_PrivateInfo_t *private_data = NULL;
 
+	vmx_bc_lock();
 	private_data = ((CAS_SessionInfo_t *)session)->private_data;
 	if (private_data->pipeline.handle != -1) {
 		VMXCA_PipelineRelease(private_data->pipeline.handle);
@@ -815,6 +822,7 @@ static int vmx_close_session(CasSession session)
 	}
 	free(private_data);
 	((CAS_SessionInfo_t *)session)->private_data = NULL;
+	vmx_bc_unlock();
 
 	return 0;
 }
@@ -841,6 +849,7 @@ static int vmx_start_descrambling(CasSession session, AM_CA_ServiceInfo_t *servi
 	uint16_t ecmPid[MAX_CHAN_COUNT];
 	uint16_t streamPid[MAX_CHAN_COUNT];
 
+	vmx_bc_lock();
 	vmx_pri_info = ((CAS_SessionInfo_t *)session)->private_data;
 	pipeline_handle = vmx_pri_info->pipeline.handle;
 
@@ -852,6 +861,7 @@ static int vmx_start_descrambling(CasSession session, AM_CA_ServiceInfo_t *servi
 	ret = VMXCA_PipelineSetInfo(pipeline_handle, &pipeline_info);
 	if (ret != VMXCA_SUCCESS) {
 		CA_DEBUG(1, "%s set pipeline param failed, ret:%d\n", __func__, ret);
+		vmx_bc_unlock();
 		return -1;
 	}
 	dsc_dev = serviceInfo->dmx_dev;
@@ -860,6 +870,7 @@ static int vmx_start_descrambling(CasSession session, AM_CA_ServiceInfo_t *servi
 	if (ret) {
 		VMXCA_PipelineRelease(pipeline_handle);
 		CA_DEBUG(1, "open dsc%d failed\n", dsc_dev);
+		vmx_bc_unlock();
 		return -1;
 	}
 
@@ -977,7 +988,6 @@ static int vmx_start_descrambling(CasSession session, AM_CA_ServiceInfo_t *servi
 	vmx_pri_info->dsc_dev = dsc_dev;
 	vmx_pri_info->dmx_dev = serviceInfo->dmx_dev;
 
-	vmx_bc_lock();
 	for (i = 0; i < serviceInfo->stream_num; i++) {
 		ecmPid[i] = serviceInfo->ecm_pid;
 		streamPid[i] = serviceInfo->stream_pids[i];
@@ -1138,12 +1148,11 @@ static int vmx_dvr_start(CasSession session, AM_CA_ServiceInfo_t *service_info)
 	m2m_info.engine_id = private_data->dvr_channelid;
 	m2m_info.hw_mode = 0;
 	ret = VMXCA_PipelineSetM2MInfo(private_data->pipeline.handle,  &m2m_info);
+	vmx_bc_unlock();
 	if (ret) {
 		CA_DEBUG(0, "Set M2M info failed\n");
-		vmx_bc_unlock();
 		vmx_stop_descrambling(session);
 	}
-	vmx_bc_unlock();
 
 	return 0;
 }
@@ -1166,21 +1175,19 @@ static int vmx_dvr_stop(CasSession session)
 		return -1;
 	}
 
-	free_service_idx(session, private_data->service_index);
 	free_dvr_channelid(channelid);
 	if (private_data->dat_fp) {
 		fclose(private_data->dat_fp);
 		private_data->dat_fp = NULL;
 	}
 
+	vmx_bc_unlock();
 	ret = vmx_stop_descrambling(session);
 	if (ret) {
 		CA_DEBUG(2, "Stop descrambling for DVR failed");
-		vmx_bc_unlock();
 		return -1;
 	}
 
-	vmx_bc_unlock();
 	return 0;
 }
 
@@ -1285,7 +1292,8 @@ static int vmx_dvr_encrypt(CasSession session, AM_CA_CryptoPara_t *cryptoPara)
 	result = VMXCA_GetViewRightOutputPadBuffer(channelid, &m2m_buf, &p_vr_output_buffer, &vr_buffer_len);
 	CA_DEBUG(0, "crypto vr_input:%p, vr_out:%p, len:%#x, ret:%#x", p_vr_input_buffer,
 			p_vr_output_buffer, vr_buffer_len, result);
-	CA_DEBUG(0, "crypto [iaddr:%p, size:%#x] [oaddr:%p, size:%#x]",
+	CA_DEBUG(0, "crypto[%d] [iaddr:%p, size:%#x] [oaddr:%p, size:%#x]",
+		 channelid,
                 m2m_eng_conf.p_in, m2m_eng_conf.in_len,
                 m2m_eng_conf.p_out, m2m_eng_conf.out_len);
 
@@ -1589,11 +1597,12 @@ static SecMemHandle vmx_create_secmem(CasSession session, CA_SERVICE_TYPE_t type
 	VMX_PrivateInfo_t *private_data;
 
 	UNUSED(type);
-	CA_DEBUG(1, "%s called\n", __func__);
+	vmx_bc_lock();
 	private_data = (VMX_PrivateInfo_t *)((CAS_SessionInfo_t *)session)->private_data;
 	if (private_data->pipeline.mode == PIPELINE_MODE_LIVE
 		|| size == NULL ) {
 		CA_DEBUG(1, "wrong param\n");
+		vmx_bc_unlock();
 		return (SecMemHandle)NULL;
 	}
 
@@ -1607,7 +1616,8 @@ static SecMemHandle vmx_create_secmem(CasSession session, CA_SERVICE_TYPE_t type
 		*pSecBuf = NULL;
 	}
 
-	CA_DEBUG(1, "alloc secmem, mode:%d\n", private_data->pipeline.mode);
+	vmx_bc_unlock();
+
 	return (SecMemHandle) * pSecBuf;
 }
 
@@ -1615,10 +1625,13 @@ static int vmx_destroy_secmem(CasSession session, SecMemHandle handle)
 {
 	VMX_PrivateInfo_t *private_data;
 
+	/* not use mutex cuz sometimes system hangup when quit/ctl+c if use it*/
+	//vmx_bc_lock();
 	private_data = (VMX_PrivateInfo_t *)((CAS_SessionInfo_t *)session)->private_data;
 	if (private_data->pipeline.handle != -1 && handle) {
 		VMXCA_PipelineFreeSecMem(private_data->pipeline.handle, (void *)handle);
 	}
+	//vmx_bc_unlock();
 
 	return 0;
 }

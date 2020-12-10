@@ -327,7 +327,6 @@ static int parse_ca_descriptor( uint8_t *p, dvb_service_info_t **dvb_info, uint1
 {
     uint16_t ca_system_id = 0, ca_pid = 0;
     uint8_t desc_tag = 0, desc_len = 0;
-    uint8_t has_iv = 0, aligned = 0, scramble_mode = 0, algorithm = 0;
     dvb_service_info_t *p_dvb_info = *dvb_info;
 
     while ( len ) {
@@ -393,6 +392,9 @@ static void section_callback(int dev_no, int fid, const uint8_t *data, int len, 
     uint8_t tid = 0;
     uint16_t sec_len = 0;
 
+    UNUSED(dev_no);
+    UNUSED(fid);
+    UNUSED(len);
     if (data == NULL) {
         CA_DEBUG(0, "%s, param error", __FUNCTION__);
         return;

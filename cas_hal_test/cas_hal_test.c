@@ -226,6 +226,7 @@ int init_tsplayer_inject(dvb_service_info_t *prog)
     memset(&aparam, 0, sizeof(aparam));
     aparam.codectype = prog->i_aformat;
     aparam.pid = prog->i_audio_pid;
+    //aparam.seclevel = 10;
     ret |= AmTsPlayer_setAudioParams(session, &aparam);
 
     if (vparam.pid != 0 && vparam.pid != 0x1fff) {
@@ -652,6 +653,7 @@ static int start_liveplay(dvb_service_info_t *prog)
     memset(&aparam, 0, sizeof(aparam));
     aparam.codectype = prog->i_aformat;
     aparam.pid = prog->i_audio_pid;
+    //aparam.seclevel = 10;
     AmTsPlayer_setAudioParams(player_session, &aparam);
     AmTsPlayer_startAudioDecoding(player_session);
 
@@ -695,7 +697,7 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
 
     memset(&rec_open_params, 0, sizeof(DVR_WrapperRecordOpenParams_t));
 
-    rec_open_params.dmx_dev_id = DMX_DEV_NO;
+    rec_open_params.dmx_dev_id = dev_no;
     rec_open_params.segment_size = 100 * 1024 * 1024;/*100MB*/
     rec_open_params.max_size = size;
     rec_open_params.max_time = duration;
@@ -1110,7 +1112,6 @@ static int stop_recording(int dev_no)
         ERR("stop/close record failed:%d\n", ret);
         return -1;
     }
-
     if (cas_session) {
         AM_CA_DVRStop(cas_session);
         ret = AM_CA_DestroySecmem(cas_session, recorder.secmem_session);
@@ -1598,7 +1599,7 @@ int main(int argc, char *argv[])
 
 		ret = sscanf(buf, "zap %d", &prog_idx);
 		if (ret >= 1) {
-		    if (is_live(mode)) {
+		    if (has_live(mode)) {
 		        prog = aml_get_program(prog_idx);
 		        if (prog) {
 			    stop_liveplay();
@@ -1619,6 +1620,7 @@ int main(int argc, char *argv[])
 			dvr_test_config(algo);
 		}
                 if (ret >= 3) {
+#if 0
                     if (mode & RECORDING) {
                         ERR("DVR already start, please stop dvr first\r\n");
                         continue;
@@ -1627,6 +1629,7 @@ int main(int argc, char *argv[])
                         ERR("Now, must use DVR device0\r\n");
                         continue;
                     }
+#endif
                     prog = aml_get_program(prog_idx);
                     INF("try to record program:%d handle:%x\r\n", prog_idx, (uint32_t)prog);
                     if (prog) {
