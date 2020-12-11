@@ -1430,6 +1430,16 @@ int main(int argc, char *argv[])
     int isIPTV = 0;
     dvb_service_info_t *prog = NULL;
 
+    char *secdvr = getenv("SECDVR");
+    int secure_dvr = 0;
+
+    if (secdvr) {
+	secure_dvr = atoi(secdvr);
+	if (secure_dvr) {
+	    INF("enable secure dvr for FTA stream\n");
+	}
+    }
+
     if (argc < 3) {
         usage(argc, argv);
         exit(0);
@@ -1530,6 +1540,11 @@ int main(int argc, char *argv[])
 	    } else {
 	        prog->service_type = DVB_TYPE;
 	    }
+
+	    if (secure_dvr) {
+		prog->scrambled = 1;
+	    }
+
 	    start_descrambling(prog);
             start_liveplay(prog);
         } else if (prog && is_live_local(mode)) {
@@ -1638,6 +1653,11 @@ int main(int argc, char *argv[])
 			} else {
 			    prog->service_type = DVB_TYPE;
 			}
+
+			if (secure_dvr) {
+				prog->scrambled = 1;
+			}
+
                         ret = start_recording(dvr_dev_no, prog, tspath);
                         if (!ret) {
                             mode |= RECORDING;
