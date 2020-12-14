@@ -388,8 +388,8 @@ static uint8_t alloc_service_idx(CasSession session)
 		return -1;
 	}
 	if (((CAS_SessionInfo_t *)session)->service_info.service_mode == SERVICE_IPTV) {
-		//g_svc_idx[i].svc_idx = (i - offset) |  0x40;
-		g_svc_idx[i].svc_idx = 0x40;
+		g_svc_idx[i].svc_idx = (i - offset) |  0x40;
+		//g_svc_idx[i].svc_idx = 0x40;
 	} else if (((CAS_SessionInfo_t *)session)->service_info.service_type == SERVICE_PVR_PLAY) {
 		g_svc_idx[i].svc_idx = i | 0x80;
 	} else {

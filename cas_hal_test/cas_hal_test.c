@@ -812,6 +812,11 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
         error = AM_CA_DVRStart(recorder.cas_session, &cas_para);
         if (error) {
             ERR("CAS start DVR failed. ret = %d\r\n", error);
+	    AM_CA_DestroySecmem(recorder.cas_session, recorder.secmem_session);
+	    recorder.secmem_session = (SecMemHandle)NULL;
+	    AM_CA_CloseSession(recorder.cas_session);
+	    recorder.cas_session = 0;
+	    dvr_wrapper_close_record(recorder_session);
             return -1;
         }
     }
@@ -829,6 +834,8 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
       dvr_wrapper_close_record(recorder_session);
       AM_CA_DestroySecmem(recorder.cas_session, recorder.secmem_session);
       recorder.secmem_session = (SecMemHandle)NULL;
+      AM_CA_CloseSession(recorder.cas_session);
+      recorder.cas_session = 0;
       return -1;
     }
 
