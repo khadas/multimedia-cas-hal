@@ -74,6 +74,7 @@
 #define AV_DEV_NO (0)
 #define DSC_DEV_NO (0)
 #define DVR_DEV_NO (0)
+#define MAX_REC_NUM (2)
 
 #define VMX_CAS_STRING "Verimatrix"
 
@@ -141,7 +142,7 @@ enum {
 
 static CasHandle g_cas_handle = 0;
 static CasTestSession play;
-static CasTestSession recorder;
+static CasTestSession recorder[MAX_REC_NUM];
 static pthread_t gInjectThread;
 static int running = 1;
 static int gInjectRunning = 0;
@@ -349,16 +350,15 @@ end:
 static DVR_Result_t encrypt_callback(DVR_CryptoParams_t *params, void *userdata)
 {
     int ret;
-    UNUSED(userdata);
-
+    CasSession cas_session = *(CasSession *)userdata;
     AM_CA_CryptoPara_t *cryptoPara = (AM_CA_CryptoPara_t *)params;
 
-    if (!recorder.cas_session) {
+    if (!cas_session) {
         ERR("%s invalid cas session\n", __func__);
         return -1;
     }
 
-    ret = AM_CA_DVREncrypt(recorder.cas_session, cryptoPara);
+    ret = AM_CA_DVREncrypt(cas_session, cryptoPara);
     if (ret) {
         cryptoPara->buf_len = 0;
         cryptoPara->buf_out.size = 0;
@@ -695,6 +695,10 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
     //sprintf(cmd, "echo ts%d > /sys/class/stb/demux%d_source", tssrc, DMX_DEV_DVR);
     //system(cmd);
 
+    if (dev_no >= MAX_REC_NUM) {
+      ERR("wrong device no %d\n", dev_no);
+      return -1;
+    }
     memset(&rec_open_params, 0, sizeof(DVR_WrapperRecordOpenParams_t));
 
     rec_open_params.dmx_dev_id = dev_no;
@@ -712,7 +716,7 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
     rec_open_params.is_timeshift = (is_timeshifting(mode)) ? DVR_TRUE : DVR_FALSE;
 
     if (prog->scrambled) {
-        rec_open_params.crypto_data = prog;
+        rec_open_params.crypto_data = &recorder[dev_no].cas_session;
         rec_open_params.crypto_fn = encrypt_callback;
     }
 
@@ -721,7 +725,7 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
       ERR( "recorder open fail = (0x%x)\n", error);
       return -1;
     }
-    recorder.dvr_session = (void *)recorder_session;
+    recorder[dev_no].dvr_session = (void *)recorder_session;
 
     INF( "Starting %s recording %p [%ld secs/%llu bytes] [%s.ts]\n",
        (is_timeshifting(mode))? "timeshift" : "normal",
@@ -737,7 +741,7 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
         uint32_t secmem_size = BLOCK_SIZE*20;
         SecMemHandle secmem_session;
 
-        error = AM_CA_OpenSession(g_cas_handle, &recorder.cas_session, service_type);
+        error = AM_CA_OpenSession(g_cas_handle, &recorder[dev_no].cas_session, service_type);
         if (error) {
             ERR("CAS open session failed. ret = %d\r\n", error);
             dvr_wrapper_close_record(recorder_session);
@@ -758,7 +762,7 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
 	}
 
         secmem_session = AM_CA_CreateSecmem(
-			recorder.cas_session,
+			recorder[dev_no].cas_session,
 			SERVICE_PVR_RECORDING,
 			&buf,
 			&secmem_size);
@@ -767,14 +771,14 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
             dvr_wrapper_close_record(recorder_session);
             return -1;
         }
-        recorder.secmem_session = secmem_session;
+        recorder[dev_no].secmem_session = secmem_session;
 
         INF("set dvr recording secmem addr:%#x size:%#x\n", (uint32_t)buf, secmem_size);
         error = dvr_wrapper_set_record_secure_buffer(recorder_session, buf, secmem_size);
         if (error) {
             dvr_wrapper_close_record(recorder_session);
-            AM_CA_DestroySecmem(recorder.cas_session, secmem_session);
-            recorder.secmem_session = (SecMemHandle)NULL;
+            AM_CA_DestroySecmem(recorder[dev_no].cas_session, secmem_session);
+            recorder[dev_no].secmem_session = (SecMemHandle)NULL;
             return -1;
         }
 
@@ -809,13 +813,13 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
 	    cas_para.service_mode = SERVICE_DVB;
 	    INF("DVB service mode:%d\n", cas_para.service_mode);
 	}
-        error = AM_CA_DVRStart(recorder.cas_session, &cas_para);
+        error = AM_CA_DVRStart(recorder[dev_no].cas_session, &cas_para);
         if (error) {
             ERR("CAS start DVR failed. ret = %d\r\n", error);
-	    AM_CA_DestroySecmem(recorder.cas_session, recorder.secmem_session);
-	    recorder.secmem_session = (SecMemHandle)NULL;
-	    AM_CA_CloseSession(recorder.cas_session);
-	    recorder.cas_session = 0;
+	    AM_CA_DestroySecmem(recorder[dev_no].cas_session, recorder[dev_no].secmem_session);
+	    recorder[dev_no].secmem_session = (SecMemHandle)NULL;
+	    AM_CA_CloseSession(recorder[dev_no].cas_session);
+	    recorder[dev_no].cas_session = 0;
 	    dvr_wrapper_close_record(recorder_session);
             return -1;
         }
@@ -832,10 +836,10 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
     {
       ERR( "recorder start fail = (0x%x)\n", error);
       dvr_wrapper_close_record(recorder_session);
-      AM_CA_DestroySecmem(recorder.cas_session, recorder.secmem_session);
-      recorder.secmem_session = (SecMemHandle)NULL;
-      AM_CA_CloseSession(recorder.cas_session);
-      recorder.cas_session = 0;
+      AM_CA_DestroySecmem(recorder[dev_no].cas_session, recorder[dev_no].secmem_session);
+      recorder[dev_no].secmem_session = (SecMemHandle)NULL;
+      AM_CA_CloseSession(recorder[dev_no].cas_session);
+      recorder[dev_no].cas_session = 0;
       return -1;
     }
 
@@ -917,7 +921,7 @@ static int dvr_test_config(uint8_t algo)
     cJSON_AddItemToObject(input, ITEM_ALGO, item);
 
     cJSON_PrintPreallocated(input, in_json, MAX_JSON_LEN, 1);
-    AM_CA_Ioctl(recorder.cas_session, in_json, out_json, MAX_JSON_LEN);
+    AM_CA_Ioctl(recorder[0].cas_session, in_json, out_json, MAX_JSON_LEN);
     INF("out_json:\n%s\n", out_json);
 
     return 0;
@@ -951,9 +955,9 @@ static int watermark_test_config(
 	INF("has live\n");
 	AM_CA_Ioctl(play.cas_session, in_json, out_json, MAX_JSON_LEN);
     }
-    if (recorder.cas_session) {
+    if (recorder[0].cas_session) {
 	INF("has recording\n");
-	AM_CA_Ioctl(recorder.cas_session, in_json, out_json, MAX_JSON_LEN);
+	AM_CA_Ioctl(recorder[0].cas_session, in_json, out_json, MAX_JSON_LEN);
     }
     INF("out_json:\n%s\n", out_json);
 
@@ -991,9 +995,9 @@ static int output_control_test_config(
 	INF("has live\n");
 	AM_CA_Ioctl(play.cas_session, in_json, out_json, MAX_JSON_LEN);
     }
-    if (recorder.cas_session) {
+    if (recorder[0].cas_session) {
 	INF("has recording\n");
-	AM_CA_Ioctl(recorder.cas_session, in_json, out_json, MAX_JSON_LEN);
+	AM_CA_Ioctl(recorder[0].cas_session, in_json, out_json, MAX_JSON_LEN);
     }
     INF("out_json:\n%s\n", out_json);
 
@@ -1109,19 +1113,22 @@ static int hdcp_test_config(uint8_t svc_idx)
 static int stop_recording(int dev_no)
 {
     int ret;
-    CasSession cas_session = recorder.cas_session;
+    CasSession cas_session = recorder[dev_no].cas_session;
 
-    UNUSED(dev_no);
+    if (dev_no >= MAX_REC_NUM) {
+      ERR("wrong device no %d\n", dev_no);
+      return -1;
+    }
 
-    ret = dvr_wrapper_stop_record((DVR_WrapperRecord_t *)recorder.dvr_session);
-    ret |= dvr_wrapper_close_record((DVR_WrapperRecord_t *)recorder.dvr_session);
+    ret = dvr_wrapper_stop_record((DVR_WrapperRecord_t *)recorder[dev_no].dvr_session);
+    ret |= dvr_wrapper_close_record((DVR_WrapperRecord_t *)recorder[dev_no].dvr_session);
     if (ret) {
         ERR("stop/close record failed:%d\n", ret);
         return -1;
     }
     if (cas_session) {
         AM_CA_DVRStop(cas_session);
-        ret = AM_CA_DestroySecmem(cas_session, recorder.secmem_session);
+        ret = AM_CA_DestroySecmem(cas_session, recorder[dev_no].secmem_session);
         if (ret) {
             ERR("destroy secmem failed:%d", ret);
             return -1;
@@ -1129,7 +1136,7 @@ static int stop_recording(int dev_no)
         AM_CA_CloseSession(cas_session);
     }
 
-    memset(&recorder, 0, sizeof(CasTestSession));
+    memset(&recorder[dev_no], 0, sizeof(CasTestSession));
 
     return 0;
 }
@@ -1455,7 +1462,7 @@ int main(int argc, char *argv[])
     init_signal_handler();
 
     memset(&play, 0, sizeof(CasTestSession));
-    memset(&recorder, 0, sizeof(CasTestSession));
+    memset(recorder, 0, sizeof(CasTestSession)*MAX_REC_NUM);
 
     if (strcmp(argv[1], "live") == 0) {
         mode = LIVE;
