@@ -18,6 +18,7 @@
 
 #define CA_DEBUG_LEVEL 2
 
+#include <sys/types.h>
 #include <string.h>
 #include <pthread.h>
 #include <assert.h>

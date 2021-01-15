@@ -15,8 +15,8 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "am_dmx.h"
 #include "am_cas.h"
+#include "am_dmx.h"
 
 #define DMX_COUNT (3)
 #define DMX_FILTER_COUNT (32*DMX_COUNT)

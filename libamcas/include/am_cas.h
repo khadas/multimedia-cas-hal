@@ -25,6 +25,7 @@ extern "C" {
 #endif
 
 #ifndef ANDROID
+#include <stdio.h>
 #define CA_DEBUG(_level,_fmt...) \
         do { \
         if ((_level)<=(CA_DEBUG_LEVEL))\
