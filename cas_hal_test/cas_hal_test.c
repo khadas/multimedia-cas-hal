@@ -294,7 +294,7 @@ static int dvb_init(void)
     ret |= AM_CA_RegisterEventCallback((CasSession)NULL, cas_event_cb);
     INF("CAS init ret = %d\r\n", ret);
 
-    return 0;
+    return ret;
 }
 
 static AM_RESULT cas_event_cb(CasSession session, char *json)
@@ -1506,13 +1506,15 @@ int main(int argc, char *argv[])
 
     INF("@@@in cas_hal_test mode = %d\n", mode);
 
-    dvb_init();
-    while (1) {
-	if (!show_cardno()) {
-	    break;
-	}
-	sleep(1);
-    };
+    ret = dvb_init();
+    if (!ret) {
+	while (1) {
+	    if (!show_cardno()) {
+	        break;
+	    }
+	    sleep(1);
+	};
+    }
 
     if (is_live(mode) || is_live_local(mode)) {
 	if (is_live(mode)) {

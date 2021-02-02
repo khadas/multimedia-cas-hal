@@ -10,4 +10,8 @@ LOCAL_C_INCLUDES := $(LOCAL_PATH)
 
 LOCAL_CFLAGS += -O0
 
+ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 30&& echo OK), OK)
+LOCAL_VENDOR_MODULE := true
+endif
+
 include $(BUILD_STATIC_LIBRARY)

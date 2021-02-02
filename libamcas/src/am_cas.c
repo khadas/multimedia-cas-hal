@@ -43,16 +43,19 @@
 static void *dl_handle = NULL;
 struct AM_CA_Impl_t *cas_ops = NULL;
 uint8_t g_cas_loaded = 0;
-
 int loadCASLibrary(void)
 {
     DIR *dir = NULL;
     struct dirent *dp = NULL;
-    char *path = "/product/lib";
+    char *path1 = "/product/lib";
+    char *path2 = "/vendor/lib";
 
-    if (!(dir = opendir(path))) {
-        CA_DEBUG(2, "opendir[%s] failed, %s", path, strerror(errno));
-        return -1;
+    if (!(dir = opendir(path1))) {
+        CA_DEBUG(2, "opendir[%s] failed, %s", path1, strerror(errno));
+	if (!(dir = opendir(path2))) {
+		CA_DEBUG(2, "opendir[%s] failed, %s", path2, strerror(errno));
+		return -1;
+	}
     }
 
     while ((dp = readdir(dir))) {
