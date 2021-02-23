@@ -47,42 +47,47 @@ int loadCASLibrary(void)
 {
     DIR *dir = NULL;
     struct dirent *dp = NULL;
-    char *path1 = "/product/lib";
-    char *path2 = "/vendor/lib";
+    char *path[]={"/product/lib", "/vendor/lib"};
+    int i;
 
-    if (!(dir = opendir(path1))) {
-        CA_DEBUG(2, "opendir[%s] failed, %s", path1, strerror(errno));
-	if (!(dir = opendir(path2))) {
-		CA_DEBUG(2, "opendir[%s] failed, %s", path2, strerror(errno));
-		return -1;
+    for (i = 0; i < sizeof(path)/sizeof(path[0]); i++) {
+	if (!(dir = opendir(path[i]))) {
+		continue;
 	}
-    }
 
-    while ((dp = readdir(dir))) {
-        const char *pfile = strrchr(dp->d_name, '_');
-        if (pfile && (strcmp(pfile, "_dvb.so") == 0)) {
-            CA_DEBUG(0, "CAS library %s found", dp->d_name);
-            if (!(dl_handle = dlopen(dp->d_name, RTLD_NOW | RTLD_GLOBAL))) {
-                CA_DEBUG(0, "dlopen %s failed, %s", dp->d_name, strerror(errno));
-                CA_DEBUG(0, "dlerror: %s", dlerror());
-                continue;
-            }
-            if (!(cas_ops = (struct AM_CA_Impl_t *)dlsym(dl_handle, "cas_ops"))) {
-                CA_DEBUG(0, "dlsym cas_ops failed, %s", strerror(errno));
-                dlclose(dl_handle);
-                continue;
-            }
+	while ((dp = readdir(dir))) {
+		const char *pfile = strrchr(dp->d_name, '_');
+		if (pfile && (!strcmp(pfile, "_dvb.so"))) {
+			CA_DEBUG(0, "CAS plugin %s\/%s found", path[i], dp->d_name);
+		} else {
+			continue;
+		}
+		if (!(dl_handle = dlopen(dp->d_name, RTLD_NOW | RTLD_GLOBAL))) {
+			CA_DEBUG(0, "dlopen %s failed, %s", dp->d_name,
+				 strerror(errno));
+			CA_DEBUG(0, "dlerror %s", dlerror());
+			continue;
+		}
+		if (!(cas_ops = (struct AM_CA_Impl_t *)dlsym(dl_handle,
+		      "cas_ops"))) {
+			CA_DEBUG(0, "dlsym failed, %s", strerror(errno));
+			dlclose(dl_handle);
+			continue;
+		}
 
-            g_cas_loaded = 1;
+		if (strcmp(cas_ops->get_version(), CAS_HAL_VER)) {
+			CA_DEBUG(1, "%s cas library[%s] and cas hal[%s] not matched",
+				 cas_ops->get_version(), CAS_HAL_VER);
+			dlclose(dl_handle);
+			continue;
+		}
 
-        if (strcmp(cas_ops->get_version(), CAS_HAL_VER)) {
-          CA_DEBUG(1, "%s cas library[%s] and cas hal[%s] not matched",
-          cas_ops->get_version(), CAS_HAL_VER);
-
-          return -1;
+		g_cas_loaded = 1;
+		closedir(dir);
+		return cas_ops->pre_init();
         }
-            return cas_ops->pre_init();
-        }
+
+	closedir(dir);
     }
 
     return -1;

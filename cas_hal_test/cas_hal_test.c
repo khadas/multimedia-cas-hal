@@ -1625,6 +1625,8 @@ int main(int argc, char *argv[])
         if (fgets(buf, 256, stdin)) {
             if (!strncmp(buf, "quit", 4)) {
                 running = 0;
+            } else if (!strncmp(buf, "stop", 4)) {
+		stop_liveplay();
             } else if (!strncmp(buf, "zap", 3)) {
 		int prog_idx;
 
