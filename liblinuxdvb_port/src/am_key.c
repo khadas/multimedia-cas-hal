@@ -16,7 +16,7 @@
  * \date 2010-08-06: create the document
  ***************************************************************************/
 
-#define AM_DEBUG_LEVEL 5
+#define CA_DEBUG_LEVEL 0
 
 #include <stdio.h>
 #include <sys/types.h>
@@ -27,6 +27,7 @@
 #include <string.h>
 #include <errno.h>
 #include "aml_key.h"
+#include "am_cas.h"
 
 /****************************************************************************
  * Macro definitions
@@ -69,29 +70,41 @@ int key_close(int fd)
 	s_fd = -1;
 	return 0;
 }
-int key_malloc(int fd, int key_userid, int key_algo, int is_iv) 
+
+/*
+ * key_malloc contains slot alloc and slot config
+ * the API also can be splicted to 2 APIs key_alloc/key_config
+ */
+int key_malloc(int fd, int key_userid, int key_algo, int is_iv)
 {
 	int ret = 0;
-	struct key_config config;
-	
-	if (fd == -1) {
-		printf("key malloc fd invalid\n");
-		return -1;
-	}
-	config.key_userid = key_userid;
-	config.key_algo   = key_algo;
-	config.is_iv = is_iv;
-	config.key_index  = -1;
+	struct key_alloc alloc_param;
+	struct key_config config_param;
 
-	ret = ioctl(fd, KEY_MALLOC_SLOT, &config);
-	if (ret == 0) {
-		printf("key_malloc index:%d\n", config.key_index);
-		return config.key_index;
-	} else {
-		printf("key_malloc key fail,fd:%d, key_userid:%d, key_algo:%d\n", fd, key_userid, key_algo);
-		printf("fail \"%s\" (%d:%s)", DEV_NAME, errno, strerror(errno));		
+	if (fd == -1) {
+		CA_DEBUG(0, "key malloc fd invalid\n");
 		return -1;
 	}
+	alloc_param.is_iv = is_iv;
+	alloc_param.key_index  = -1;
+
+	ret = ioctl(fd, KEY_ALLOC, &alloc_param);
+	if (ret == 0) {
+		CA_DEBUG(0, "key_malloc index:%d\n", alloc_param.key_index);
+	} else {
+		CA_DEBUG(0, "fail \"%s\" (%d:%s)", DEV_NAME, errno, strerror(errno));
+		return -1;
+	}
+
+	config_param.key_index = alloc_param.key_index;
+	config_param.key_userid = key_userid;
+	config_param.key_algo = key_algo;
+	ret = ioctl(fd, KEY_CONFIG, &config_param);
+	if (ret) {
+		CA_DEBUG(0, "slot config failed\n");
+	}
+
+	return alloc_param.key_index;
 }
 
 int key_free(int fd, int key_index)
@@ -104,7 +117,7 @@ int key_free(int fd, int key_index)
 		return -1;
 	}
 
-	ret = ioctl(fd, KEY_FREE_SLOT, key_index);
+	ret = ioctl(fd, KEY_FREE, key_index);
 	if (ret == 0) {
 		printf("key_free key_index:%d succees\n", key_index);
 		return 0;
@@ -118,7 +131,7 @@ int key_set(int fd, int key_index, char *key, int key_len)
 {
 	int ret = 0;
 	struct key_descr key_d;
-	
+
 	if (fd == -1 || key_index ==  -1 || key_len > 32) {
 		printf("key_set invalid parameter, fd:%d, key_index:%d, key_len:%d\n",
 			fd, key_index, key_len);

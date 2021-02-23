@@ -23,19 +23,18 @@ LOCAL_SRC_FILES := \
     src/am_dmx.c \
     src/am_smc.c \
     src/aml.c \
-    src/am_ca.c \
-    src/am_key.c
+    src/am_key.c \
+    src/am_ca.c
 
 LOCAL_C_INCLUDES := \
 		$(LOCAL_PATH) \
 		$(LOCAL_PATH)/include \
-		$(LOCAL_PATH)/../libamcas/include \
-		common/include/linux/amlogic \
+		$(LOCAL_PATH)/../libamcas/include
 
 
-LOCAL_SHARED_LIBRARIES += liblog\
+LOCAL_SHARED_LIBRARIES += liblog \
   libcutils \
-  libutils \
+  libutils
 
 LOCAL_CFLAGS += -O0
 
@@ -44,4 +43,3 @@ ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 30&& echo OK),OK)
 endif
 
 include $(BUILD_STATIC_LIBRARY)
-

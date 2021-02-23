@@ -1,5 +1,6 @@
+/* SPDX-License-Identifier: LGPL-2.1+ WITH Linux-syscall-note */
 /*
- * drivers/amlogic/dvb/demux/aml_key.h
+ * include/linux/amlogic/aml_key.h
  *
  * Copyright (C) 2017 Amlogic, Inc. All rights reserved.
  *
@@ -21,7 +22,9 @@
 enum user_id {
 	DSC_LOC_DEC,
 	DSC_NETWORK,
-	DSC_LOC_ENC
+	DSC_LOC_ENC,
+
+	CRYPTO_T0 = 0x100,
 };
 
 enum key_algo {
@@ -41,15 +44,21 @@ struct key_descr {
 };
 
 struct key_config {
+	unsigned int key_index;
 	int key_userid;
 	int key_algo;
+};
+
+struct key_alloc {
 	int is_iv;
 	unsigned int key_index;
 };
 
-#define KEY_MALLOC_SLOT   _IOWR('o', 64, struct key_config)
-#define KEY_FREE_SLOT     _IO('o', 65)
+#define KEY_ALLOC         _IOWR('o', 64, struct key_alloc)
+#define KEY_FREE          _IO('o', 65)
 #define KEY_SET           _IOR('o', 66, struct key_descr)
+#define KEY_CONFIG        _IOR('o', 67, struct key_config)
+#define KEY_GET_FLAG      _IOWR('o', 68, struct key_descr)
 
 //int dmx_key_init(void);
 //void dmx_key_exit(void);
