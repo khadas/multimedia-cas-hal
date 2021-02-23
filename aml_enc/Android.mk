@@ -16,20 +16,17 @@
 LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
-LOCAL_MODULE := libam_cas
+LOCAL_MODULE := libaml_enc_dvb
 LOCAL_MULTILIB := 32
 LOCAL_ARM_MODE := arm
-LOCAL_SRC_FILES := \
-    src/am_cas.c
+LOCAL_FILE_LIST := $(wildcard $(LOCAL_PATH)/*.c)
+LOCAL_SRC_FILES := $(LOCAL_FILE_LIST:$(LOCAL_PATH)/%=%)
 
 LOCAL_C_INCLUDES := \
-		$(LOCAL_PATH)/include
+		$(LOCAL_PATH)/include \
+		$(LOCAL_PATH)/../libamcas/include
 
-LOCAL_SHARED_LIBRARIES += liblog\
-  libcutils \
-  libutils
-
-LOCAL_CFLAGS += -O0
+LOCAL_SHARED_LIBRARIES += liblog libcutils libutils
 
 ifeq ($(shell test $(PLATFORM_SDK_VERSION) -eq 29 && echo OK),OK)
     LOCAL_PRODUCT_MODULE := true
@@ -37,4 +34,5 @@ else
     LOCAL_VENDOR_MODULE := true
 endif
 
-include $(BUILD_STATIC_LIBRARY)
+LOCAL_PRELINK_MODULE := false
+include $(BUILD_SHARED_LIBRARY)

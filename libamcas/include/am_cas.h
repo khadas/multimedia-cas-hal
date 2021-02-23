@@ -24,6 +24,10 @@
 extern "C" {
 #endif
 
+#ifndef CA_DEBUG_LEVEL
+#define CA_DEBUG_LEVEL 1000
+#endif
+
 #ifndef ANDROID
 #include <stdio.h>
 #define CA_DEBUG(_level,_fmt...) \
