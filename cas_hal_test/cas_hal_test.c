@@ -15,7 +15,7 @@
  *
  * For Live:
  * \code
- *   cas_hal_test live <fend_dev_no> <prog_index> <freqM>
+ *   cas_hal_test live <fend_dev_no> <input_dev_no> <prog_index> <freqM>
  * \endcode
  * For Live local:
  * \code
@@ -1387,7 +1387,7 @@ static void usage(int argc, char *argv[])
 {
     UNUSED(argc);
 
-    INF("Usage: live      : %s live <fend_dev_no> <prog_idx> <freqM> <isIPTV>\n", argv[0]);
+    INF("Usage: live      : %s live <fend_dev_no> <input_dev_no> <prog_idx> <freqM> <isIPTV>\n", argv[0]);
     INF("Usage: local	  : %s local <tsfile> <prog_idx>\n", argv[0]);
     INF("Usage: playback  : %s dvrplay <tsfile> <scramble_flag>\n", argv[0]);
 }
@@ -1438,6 +1438,7 @@ int main(int argc, char *argv[])
     char tspath[256] = {0};
     int dvr_dev_no = 0;
     int fend_dev_no = 0;
+    int input_dev_no = 0;
     int prog_idx = 0;
     int scrambled = 1;
     int freqM = 394;
@@ -1467,14 +1468,17 @@ int main(int argc, char *argv[])
     if (strcmp(argv[1], "live") == 0) {
         mode = LIVE;
         sscanf(argv[2], "%d", &fend_dev_no);
-        if (argc > 3) {
-            sscanf(argv[3], "%d", &prog_idx);
-        }
-	if (argc > 4) {
-	    sscanf(argv[4], "%d", &freqM);
+	if (argc > 3) {
+	    sscanf(argv[3], "%d", &input_dev_no);
 	}
+        if (argc > 4) {
+            sscanf(argv[4], "%d", &prog_idx);
+        }
 	if (argc > 5) {
-	    sscanf(argv[5], "%d", &isIPTV);
+	    sscanf(argv[5], "%d", &freqM);
+	}
+	if (argc > 6) {
+	    sscanf(argv[6], "%d", &isIPTV);
 	}
     } else if (strcmp(argv[1], "local") == 0) {
         mode = LIVE_LOCAL;
@@ -1518,8 +1522,14 @@ int main(int argc, char *argv[])
 
     if (is_live(mode) || is_live_local(mode)) {
 	if (is_live(mode)) {
+	    DVB_DemuxSource_t dmx_src;
+
             fend_lock(fend_dev_no, freqM);
-	    dvb_set_demux_source(DMX_DEV_NO, DVB_DEMUX_SOURCE_TS0);
+	    dmx_src = DVB_DEMUX_SOURCE_TS0 + input_dev_no;
+	    if (dmx_src > DVB_DEMUX_SOURCE_DMA7) {
+		dmx_src = DVB_DEMUX_SOURCE_TS1;
+	    }
+	    dvb_set_demux_source(DMX_DEV_NO, dmx_src);
 	} else {
 	    dvb_service_info_t prog;
 
