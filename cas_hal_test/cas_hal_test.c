@@ -180,13 +180,13 @@ static int fend_lock(int dev_no, int freqM)
     delivery.device_type = DMD_CABLE;
     delivery.delivery.cable.frequency = freqM*1000;
     delivery.delivery.cable.symbol_rate = 5217;
-    delivery.delivery.cable.modulation = DMD_MOD_128QAM;
+    delivery.delivery.cable.modulation = DMD_MOD_QAM;//DMD_MOD_128QAM;
     ret = dmd_lock_c(fend_id, &delivery);
 
     INF("DVB-C: lock to freq:%d, modulation:%d symbol_rate:%d ret:%d \n",
 	delivery.delivery.cable.frequency,
 	delivery.delivery.cable.modulation,
-	delivery.delivery.cable.symbol_rate, 
+	delivery.delivery.cable.symbol_rate,
 	ret);
 
     if (ret) {
