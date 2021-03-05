@@ -140,12 +140,17 @@ static int meta_proc(CasSession session, AM_CA_CryptoPara_t *cryptoPara, int dec
 {
     char *proc_name = decrypt ? "decrypt" : "encrypt";
     aenc_sess_t *p_sess = (aenc_sess_t *)((CAS_SessionInfo_t *)session)->private_data;
-    int fail = 0;
+    int fail = 1;
 
     if (p_sess->meta_id == cryptoPara->segment_id)
         return 0;
 
-    if (p_sess->meta_fd == -1) {
+    if (p_sess->meta_fd != -1) {
+        close(p_sess->meta_fd);
+        p_sess->meta_fd = -1;
+    }
+
+    {
         char meta_name[1024];
 
         snprintf(meta_name, sizeof(meta_name),
@@ -154,7 +159,6 @@ static int meta_proc(CasSession session, AM_CA_CryptoPara_t *cryptoPara, int dec
         p_sess->meta_fd = open(meta_name,
             (decrypt? O_RDONLY : O_WRONLY | O_CREAT | O_TRUNC) | O_SYNC,
             S_IRUSR | S_IWUSR);
-        CA_DEBUG(0, "open = %d", p_sess->meta_fd);
     }
 
     //todo: encrypt the meta
@@ -165,14 +169,14 @@ static int meta_proc(CasSession session, AM_CA_CryptoPara_t *cryptoPara, int dec
         if (decrypt) {
             ssize_t ret = read(p_sess->meta_fd, &meta, sizeof(meta));
 
-            if (ret == sizeof(meta))
+            if (ret == sizeof(meta)) {
                 *p_sinfo = meta.service_info;
-            else
-                fail = 1;
+                fail = 0;
+            }
         } else {
             ssize_t ret = write(p_sess->meta_fd, &meta, sizeof(meta));
-            if (ret != sizeof(meta))
-                fail = 1;
+            if (ret == sizeof(meta))
+                fail = 0;
         }
 
         p_sess->meta_id = cryptoPara->segment_id;
