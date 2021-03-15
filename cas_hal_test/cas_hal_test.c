@@ -130,6 +130,7 @@ static int duration=180000;
 static int size=1024*1024*1024;
 static char *pfilename = "/data/data/timeshifting.ts";
 static int check_pin_status = PIN_MAX;
+static int rec_status = 0;
 
 enum {
     LIVE        = 0x01,
@@ -1405,7 +1406,12 @@ static int cas_test_term(void)
     }
 
     if (has_recording(mode)) {
-        stop_recording(DVR_DEV_NO);
+	int i;
+	for (i = 0; i < MAX_REC_NUM; i++) {
+	    if (rec_status & (1 << i)) {
+		stop_recording(i);
+	    }
+	}
     }
 
     if (is_ext_playback(mode)) {
@@ -1655,6 +1661,7 @@ int main(int argc, char *argv[])
 	    } else if (!strncmp(buf, "dvrrecord", 9)) {
                 int prog_idx;
 		uint8_t algo;
+		DVB_DemuxSource_t dmx_src;
 
 		isIPTV = 0;
                 ret = sscanf(buf, "dvrrecord %d %d %255s %hhu %d", &dvr_dev_no,
@@ -1686,10 +1693,17 @@ int main(int argc, char *argv[])
 				prog->scrambled = 1;
 			}
 
+			dmx_src = DVB_DEMUX_SOURCE_TS0 + input_dev_no;
+			if (dmx_src > DVB_DEMUX_SOURCE_DMA7) {
+				dmx_src = DVB_DEMUX_SOURCE_TS1;
+			}
+			dvb_set_demux_source(dvr_dev_no, dmx_src);
+
                         ret = start_recording(dvr_dev_no, prog, tspath);
                         if (!ret) {
                             mode |= RECORDING;
                             pfilename = tspath;
+			    rec_status |= (1 << dvr_dev_no);
                             INF("recording%d started\n", dvr_dev_no);
                         } else {
                             ERR("start recording failed. ret:%d\r\n", ret);
@@ -1700,22 +1714,21 @@ int main(int argc, char *argv[])
                 }
 	    } else if (!strncmp(buf, "dvrstop", 7)) {
                 ret = sscanf(buf, "dvrstop %d", &dvr_dev_no);
-                if (ret != 1 || dvr_dev_no != 0)
+                if (ret != 1)
                 {
                     ERR("wrong input, cmd: dvrstop dvr_dev_no");
                     continue;
                 }
-                if (mode & RECORDING) {
-                    ret = stop_recording(dvr_dev_no);
-                    if (!ret) {
-                        mode &= ~RECORDING;
-                        INF("recording%d stopped\n", dvr_dev_no);
-                    } else {
-                        INF("recording%d stop failed:%d\n", dvr_dev_no, ret);
-                    }
+                ret = stop_recording(dvr_dev_no);
+                if (!ret) {
+		    rec_status &= ~(1 << dvr_dev_no);
+		    if (rec_status == 0) {
+			mode &= ~RECORDING;
+		    }
+		    INF("recording%d stopped\n", dvr_dev_no);
                 } else {
-                    ERR("recording%d didn't start yet\n", dvr_dev_no);
-                }
+		    INF("recording%d stop failed:%d\n", dvr_dev_no, ret);
+		}
             } else if (!strncmp(buf, "tsstart", 7)) {
                 if (has_recording(mode)) {
                     ERR("DVR already start, please stop dvr first\n");
