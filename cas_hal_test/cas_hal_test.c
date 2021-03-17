@@ -1370,6 +1370,30 @@ static int start_playback(void *params, int scrambled, int pause)
     return 0;
 }
 
+static int pause_playback(void)
+{
+    int error;
+
+    if (play.dvr_session) {
+	error = dvr_wrapper_pause_playback(play.dvr_session);
+    }
+
+    INF("pause = (%d)\n", error);
+    return error;
+}
+
+static int resume_playback(void)
+{
+    int error;
+
+    if (play.dvr_session) {
+	error = dvr_wrapper_resume_playback(play.dvr_session);
+    }
+
+    INF("resume = (%d)\n", error);
+    return error;
+}
+
 static int stop_playback(void)
 {
     dvr_wrapper_stop_playback((DVR_WrapperPlayback_t *)play.dvr_session);
@@ -1760,7 +1784,15 @@ int main(int argc, char *argv[])
                     ERR("Not in timeshifint mode\n");
                     continue;
                 }
-            } else if (!strncmp(buf, "cardno", 6)) {
+            } else if (!strncmp(buf, "pause", 5)) {
+		if (is_timeshifting(mode)) {
+		    pause_playback();
+		}
+	    } else if (!strncmp(buf, "resume", 6)) {
+		if (is_timeshifting(mode)) {
+		    resume_playback();
+		}
+	    } else if (!strncmp(buf, "cardno", 6)) {
 		show_cardno();
 	    } else if (!strncmp(buf, "wm", 2)) {
 		uint8_t on = 0, config = 0, strength = 0;
