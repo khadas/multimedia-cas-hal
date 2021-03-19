@@ -70,11 +70,10 @@
 #define FEND_DEV_NO (0)
 #define DMX_DEV_NO (0)
 #define DMX_DEV_NO_2ND (1)
-#define DMX_DEV_NO_3RD (2)
 #define AV_DEV_NO (0)
 #define DSC_DEV_NO (0)
 #define DVR_DEV_NO (0)
-#define MAX_REC_NUM (2)
+#define MAX_REC_NUM (4)
 
 #define VMX_CAS_STRING "Verimatrix"
 
@@ -790,11 +789,7 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
         }
 
         memset(&cas_para, 0x0, sizeof(AM_CA_ServiceInfo_t));
-        if (is_timeshifting(mode)) {
-            cas_para.dmx_dev = DMX_DEV_NO_3RD;
-        } else {
-            cas_para.dmx_dev = DMX_DEV_NO;
-        }
+        cas_para.dmx_dev = dev_no;
 
         cas_para.service_id = prog->i_program_num;
         cas_para.service_type = SERVICE_PVR_RECORDING;
