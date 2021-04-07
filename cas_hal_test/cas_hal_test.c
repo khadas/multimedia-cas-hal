@@ -420,7 +420,7 @@ static DVR_Result_t RecEventHandler(DVR_RecordEvent_t event, void *params, void 
             //INF("Record event %d\n", status->state);
             break;
          default:
-            ERR("Unhandled recording event 0x%x from (%s)\n", event, (char *)userdata);
+            //ERR("Unhandled recording event 0x%x from (%s)\n", event, (char *)userdata);
          break;
       }
    }
@@ -461,7 +461,7 @@ static DVR_Result_t PlayEventHandler(DVR_PlaybackEvent_t event, void *params, vo
            //PLAY_EVT("EOF (%s)\n", (char *)userdata);
          break;
          default:
-           ERR("Unhandled event 0x%x from (%s)\n", event, (char *)userdata);
+           //ERR("Unhandled event 0x%x from (%s)\n", event, (char *)userdata);
          break;
       }
    }
