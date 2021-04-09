@@ -1671,8 +1671,8 @@ int main(int argc, char *argv[])
 		        prog = aml_get_program(prog_idx);
 		        if (prog) {
 			    stop_liveplay();
-			    start_liveplay(prog);
 		            start_descrambling(prog);
+			    start_liveplay(prog);
 		        }
 		    }
 		}
@@ -1773,8 +1773,8 @@ int main(int argc, char *argv[])
                     stop_recording(DVR_DEV_NO);
 
                     mode = LIVE;
-                    start_liveplay(prog);
 		    start_descrambling(prog);
+                    start_liveplay(prog);
                 } else {
                     ERR("Not in timeshifint mode\n");
                     continue;
