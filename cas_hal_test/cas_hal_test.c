@@ -615,7 +615,7 @@ static int start_liveplay(dvb_service_info_t *prog)
     am_tsplayer_video_params vparam;
     am_tsplayer_audio_params aparam;
     am_tsplayer_init_params param;
-    am_tsplayer_avsync_mode avsyncmode = TS_SYNC_AMASTER;
+    am_tsplayer_avsync_mode avsyncmode = TS_SYNC_VMASTER;
 
     am_tsplayer_handle player_session;
 
