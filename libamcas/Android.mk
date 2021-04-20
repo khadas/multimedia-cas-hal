@@ -38,3 +38,21 @@ else
 endif
 
 include $(BUILD_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := libam_cas_sys
+LOCAL_MULTILIB := 32
+LOCAL_ARM_MODE := arm
+LOCAL_SRC_FILES := \
+    src/am_cas.c
+
+LOCAL_C_INCLUDES := \
+		$(LOCAL_PATH)/include
+
+LOCAL_SHARED_LIBRARIES += liblog\
+  libcutils \
+  libutils
+
+LOCAL_CFLAGS += -O0
+
+include $(BUILD_STATIC_LIBRARY)
