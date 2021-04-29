@@ -73,14 +73,28 @@ static int aml_enc_open_session(CasHandle handle, CasSession session, CA_SERVICE
 
     char buf[4096];
     char *p1, *p2;
-    uint8_t des_key[] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77};
+    uint8_t  des_key[] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77};
+    uint64_t key_v = 0;
 
     int ret = file_read("/proc/cpuinfo", buf, sizeof(buf));
     if ((ret != 0) && (p1 = strstr(buf, "Serial"))) {
-        if ((p2 = strstr(p1, ": ")))
-            sscanf(p2, ": %02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx%02hhx",
-                &des_key[0], &des_key[1], &des_key[2], &des_key[3],
-                &des_key[4], &des_key[5], &des_key[6], &des_key[7]);
+        if ((p2 = strstr(p1, ": "))) {
+            char *pc = p2 + 2;
+
+            while (1) {
+                int r;
+                uint8_t n;
+
+                r = sscanf(pc, "%02hhx", &n);
+                if (r != 1)
+                    break;
+
+                key_v = ((key_v << 5) | n);
+                pc += 2;
+            }
+
+            *(uint64_t*)des_key = key_v;
+       }
     }
 
     CA_DEBUG(0, "[aml_enc]des key: %02x%02x%02x%02x%02x%02x%02x%02x\n",
