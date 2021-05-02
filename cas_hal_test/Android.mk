@@ -33,6 +33,8 @@ endif
 
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE:= cas_hal_test
+LOCAL_LICENSE_KINDS:= SPDX-license-identifier-Apache-2.0 SPDX-license-identifier-BSD SPDX-license-identifier-LGPL legacy_by_exception_only
+LOCAL_LICENSE_CONDITIONS:= by_exception_only notice restricted
 
 include $(BUILD_EXECUTABLE)
 endif

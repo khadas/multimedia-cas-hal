@@ -2,6 +2,8 @@ LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libaml_dvb
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0 SPDX-license-identifier-BSD SPDX-license-identifier-LGPL legacy_by_exception_only
+LOCAL_LICENSE_CONDITIONS := by_exception_only notice restricted
 LOCAL_MULTILIB := 32
 LOCAL_ARM_MODE := arm
 LOCAL_SRC_FILES := src/aml_main.c
