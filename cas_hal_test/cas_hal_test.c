@@ -382,16 +382,24 @@ static DVR_Result_t decrypt_callback(DVR_CryptoParams_t *params, void *userdata)
 
     if (!play.replayed) {
 	ret = AM_CA_DVRReplay(play.cas_session, cryptoPara);
-	play.replayed = 1;
 	if (check_pin_status == PIN_NEED_CHECK) {
 	    do {
 		//INF("wait state %d\n", check_pin_status);
 		usleep(200*1000);
 	    } while (check_pin_status != PIN_CHECK_SUCCESS &&
 		     running);
-	    AM_CA_DVRReplay(play.cas_session, cryptoPara);
+	    ret = AM_CA_DVRReplay(play.cas_session, cryptoPara);
+	}
+
+	if (!ret) {
+	    play.replayed = 1;
+	} else {
+		cryptoPara->buf_len = cryptoPara->buf_in.size;
+		cryptoPara->buf_out.size = cryptoPara->buf_in.size;
+		return 0;
 	}
     }
+
     ret = AM_CA_DVRDecrypt(play.cas_session, cryptoPara);
     if (ret) {
         cryptoPara->buf_len = 0;

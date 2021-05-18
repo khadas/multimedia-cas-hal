@@ -129,7 +129,7 @@ static void *inject_thread(void *arg)
             res = AmTsPlayer_writeData(tsplayer_handle, &ibuf, kRwTimeout);
             if (res == AM_TSPLAYER_ERROR_RETRY) {
                 usleep(50000);
-		INF("tsplayer write retry\n");
+		//INF("tsplayer write retry\n");
             } else {
 		//INF("%#x Bytes injected\n", ibuf.buf_size);
                 break;
@@ -284,10 +284,8 @@ int ext_dvr_playback(const char *path, CasHandle cas_handle)
 
        result = AmTsPlayer_setWorkMode(tsplayer_handle, TS_PLAYER_MODE_NORMAL);
        INF( " TsPlayer set Workmode NORMAL %s, result(%d)\n", (result)? "FAIL" : "OK", result);
-       //result = AmTsPlayer_setSyncMode(tsplayer_handle, TS_SYNC_NOSYNC );
-       //PLAY_DBG(" TsPlayer set Syncmode FREERUN %s, result(%d)", (result)? "FAIL" : "OK", result);
-       result = AmTsPlayer_setSyncMode(tsplayer_handle, TS_SYNC_PCRMASTER );
-       INF( " TsPlayer set Syncmode PCRMASTER %s, result(%d)\n", (result)? "FAIL" : "OK", result);
+       result = AmTsPlayer_setSyncMode(tsplayer_handle, TS_SYNC_VMASTER );
+       INF( " TsPlayer set Syncmode VMASTER %s, result(%d)\n", (result)? "FAIL" : "OK", result);
 
 	vparam.codectype = vfmt;
 	vparam.pid = vpid;
