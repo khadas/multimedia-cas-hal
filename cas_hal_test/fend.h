@@ -1,5 +1,10 @@
 #ifndef __FEND_H__
 #define __FEND_H__
+
+#ifndef __ANDROID_API__
+typedef unsigned int uint_t;
+#endif
+
 typedef enum
 {
   DMD_DOWNLINK_INJECTION,
