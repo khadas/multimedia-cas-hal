@@ -296,7 +296,7 @@ int ext_dvr_playback(const char *path, CasHandle cas_handle)
 
 	aparam.codectype = afmt;
 	aparam.pid = apid;
-	aparam.seclevel = 10;
+	//aparam.seclevel = 10;
 	result = AmTsPlayer_setAudioParams(tsplayer_handle, &aparam);
 	INF( " TsPlayer set audio params %s, result(%d)\n", (result)? "FAIL" : "OK", result);
 	result = AmTsPlayer_startAudioDecoding(tsplayer_handle);

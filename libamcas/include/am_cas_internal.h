@@ -27,11 +27,7 @@
 #ifndef _AM_CAS_INTERNAL_H
 #define _AM_CAS_INTERNAL_H
 
-#ifndef __ANDROID__
-    #define AM_NVM_FILE	 			"/var/nv/vmx_nvram"
-#else
-    #define AM_NVM_FILE	 			"/data/vmx_nvram"
-#endif
+#define AM_NVM_FILE				"/data/vmx_nvram"
 
 #define CAS_HAL_VER "0.1.0"
 

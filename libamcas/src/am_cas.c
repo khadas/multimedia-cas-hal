@@ -47,7 +47,7 @@ int loadCASLibrary(void)
 {
     DIR *dir = NULL;
     struct dirent *dp = NULL;
-    char *path[]={"/product/lib", "/vendor/lib"};
+    char *path[]={"/product/lib", "/vendor/lib", "/usr/lib"};
     int i;
 
     for (i = 0; i < sizeof(path)/sizeof(path[0]); i++) {
