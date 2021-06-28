@@ -27,24 +27,10 @@ extern "C" {
 #ifndef CA_DEBUG_LEVEL
 #define CA_DEBUG_LEVEL 1000
 #endif
-
-#ifndef ANDROID
-#include <stdio.h>
-#define CA_DEBUG(_level,_fmt...) \
-        do { \
-        if ((_level)<=(CA_DEBUG_LEVEL))\
-        {\
-                fprintf(stderr, "CA_DEBUG:");\
-                fprintf(stderr, _fmt);\
-                fprintf(stderr, "\n");\
-        }\
-        } while(0)
-#else
 #include <android/log.h>
 #ifndef TAG_EXT
 #define TAG_EXT
 #endif
-
 #define log_print(...) __android_log_print(ANDROID_LOG_INFO, "CA_DEBUG" TAG_EXT, __VA_ARGS__)
 #define CA_DEBUG(_level,_fmt...) \
         do { \
@@ -53,7 +39,6 @@ extern "C" {
                 log_print(_fmt);\
         }\
         } while(0)
-#endif
 
 #define UNUSED(x) (x=x)
 #define CAS_ASSERT(expression)    if (!expression) { \
