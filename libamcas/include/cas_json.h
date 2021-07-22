@@ -79,5 +79,9 @@
 
 #define ITEM_HDCP		"hdcp"
 
+#define ITEM_SESSION_ID		"id"
+#define ITEM_BOXID		"boxid"
+#define ITEM_GETBOXID		"GetBoxID"
+
 #define MAX_JSON_LEN (1024)
 

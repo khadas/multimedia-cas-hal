@@ -880,6 +880,36 @@ static int show_cardno(void)
     return 0;
 }
 
+static int show_boxid(void)
+{
+    cJSON *input = NULL;
+    cJSON *item = NULL;
+    char in_json[MAX_JSON_LEN];
+    char out_json[MAX_JSON_LEN];
+
+    input = cJSON_CreateObject();
+    item = cJSON_CreateString(VMX_CAS_STRING);
+    cJSON_AddItemToObject(input, ITEM_CAS, item);
+    item = cJSON_CreateString(ITEM_GETBOXID);
+    cJSON_AddItemToObject(input, ITEM_CMD, item);
+    cJSON_PrintPreallocated(input, in_json, MAX_JSON_LEN, 1);
+    AM_CA_Ioctl(play.cas_session, in_json, out_json, MAX_JSON_LEN);
+    cJSON_Delete(input);
+
+    input = cJSON_Parse(out_json);
+    item = cJSON_GetObjectItemCaseSensitive(input, ITEM_BOXID);
+    if (!cJSON_IsString(item) || item->valuestring[0] == '\0') {
+	    cJSON_Delete(input);
+	    INF("Get box id failed\n");
+	    return -1;
+    }
+
+    INF("boxid:%s\n", item->valuestring);
+    cJSON_Delete(input);
+
+    return 0;
+}
+
 static int check_pin(char *pin, uint8_t pinIndex, uint8_t reason)
 {
     cJSON *input = NULL;
@@ -1797,6 +1827,8 @@ int main(int argc, char *argv[])
 		}
 	    } else if (!strncmp(buf, "cardno", 6)) {
 		show_cardno();
+	    } else if (!strncmp(buf, "boxid", 5)) {
+		show_boxid();
 	    } else if (!strncmp(buf, "wm", 2)) {
 		uint8_t on = 0, config = 0, strength = 0;
 		ret = sscanf(buf, "wm %hhu %hhu %hhu", &on, &config, &strength);
