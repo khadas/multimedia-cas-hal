@@ -1273,6 +1273,9 @@ static int start_playback(void *params, int scrambled, int pause)
         case AV_VIDEO_CODEC_H264:
             vfmt = DVR_VIDEO_FORMAT_H264;
             break;
+        case AV_VIDEO_CODEC_H265:
+            vfmt = DVR_VIDEO_FORMAT_HEVC;
+            break;
         default:
             break;
     };
@@ -1394,6 +1397,30 @@ static int resume_playback(void)
     }
 
     INF("resume = (%d)\n", error);
+    return error;
+}
+
+static int fast_playback(float speed)
+{
+    int error = 0;
+
+    if (play.dvr_session) {
+	error = dvr_wrapper_set_playback_speed(play.dvr_session, speed);
+    }
+
+    INF("fast_speed %f = (%d)\n", speed, error);
+    return error;
+}
+
+static int seek_playback(int time)
+{
+    int error = 0;
+
+    if (play.dvr_session) {
+	error = dvr_wrapper_seek_playback(play.dvr_session, time);
+    }
+
+    INF("see %d = (%d)\n", time, error);
     return error;
 }
 
@@ -1641,6 +1668,10 @@ int main(int argc, char *argv[])
     system(cmd);
     sprintf(cmd, "echo 1 > /sys/class/graphics/fb0/blank");
     system(cmd);
+
+    sprintf(cmd, " echo 1 > /sys/kernel/debug/dri/0/vpu/blank");
+    system(cmd);
+
     sprintf(cmd, "echo 0 2 > /sys/class/video/path_select");
     system(cmd);
     sprintf(cmd, "echo 1 > /sys/class/video/video_global_output");
@@ -1794,6 +1825,22 @@ int main(int argc, char *argv[])
 	    } else if (!strncmp(buf, "resume", 6)) {
 		if (is_timeshifting(mode)) {
 		    resume_playback();
+		}
+	    } else if (!strncmp(buf, "fast", 4)) {
+		if (is_playback(mode)) {
+		float speed = 100;
+		ret = sscanf(buf, "fast %f ", &speed);
+		if (ret >= 1) {
+			fast_playback(speed);
+		}
+		}
+	    }  else if (!strncmp(buf, "seek", 4)) {
+		if (is_playback(mode)) {
+		int time = 0;
+		ret = sscanf(buf, "seek %d ", &time);
+		if (ret >= 1) {
+			seek_playback(time);
+		}
 		}
 	    } else if (!strncmp(buf, "cardno", 6)) {
 		show_cardno();
