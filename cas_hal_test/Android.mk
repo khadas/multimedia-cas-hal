@@ -13,7 +13,7 @@ LOCAL_C_INCLUDES := \
         $(LOCAL_PATH)/../libcJSON \
         $(LOCAL_PATH)/../liblinuxdvb_port/include \
         vendor/amlogic/common/prebuilt/dvb/include/am_adp \
-        vendor/amlogic/common/libdvr_release/include \
+        vendor/amlogic/common/libdvr/include \
         vendor/amlogic/common/mediahal_sdk/include
 
 LOCAL_SHARED_LIBRARIES := liblog
