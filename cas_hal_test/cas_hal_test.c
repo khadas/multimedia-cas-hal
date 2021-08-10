@@ -222,6 +222,7 @@ int init_tsplayer_inject(dvb_service_info_t *prog)
     ret |= AmTsPlayer_setWorkMode(session, TS_PLAYER_MODE_NORMAL);
     ret |= AmTsPlayer_registerCb(session, video_callback, NULL);
 
+    memset(&vparam, 0, sizeof(vparam));
     vparam.codectype = prog->i_vformat;
 
     vparam.pid = prog->i_video_pid;
@@ -662,6 +663,7 @@ static int start_liveplay(dvb_service_info_t *prog)
 #endif
     INF("create tsplayer success. session:%#x instance_no:%d ret:%d\r\n", player_session, num, ret);
 
+    memset(&vparam, 0, sizeof(vparam));
     vparam.codectype = prog->i_vformat;
     vparam.pid = prog->i_video_pid;
     AmTsPlayer_setVideoParams(player_session, &vparam);
