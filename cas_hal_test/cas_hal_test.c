@@ -49,6 +49,9 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <signal.h>
+#ifdef ANDROID
+#include <cutils/properties.h>
+#endif
 
 #include "AmTsPlayer.h"
 #include "dvr_segment.h"
@@ -651,6 +654,12 @@ static int start_liveplay(dvb_service_info_t *prog)
     ret |= AmTsPlayer_setWorkMode(player_session, TS_PLAYER_MODE_NORMAL);
     ret |= AmTsPlayer_registerCb(player_session, video_callback, NULL);
     ret |= AmTsPlayer_setSyncMode(player_session, avsyncmode);
+#ifdef ANDROID
+    am_tsplayer_audio_patch_manage_mode audio_mode = AUDIO_PATCH_MANAGE_FORCE_ENABLE;
+    ret |= AmTsPlayer_setParams(player_session,
+				AM_TSPLAYER_KEY_SET_AUDIO_PATCH_MANAGE_MODE,
+				&audio_mode);
+#endif
     INF("create tsplayer success. session:%#x instance_no:%d ret:%d\r\n", player_session, num, ret);
 
     vparam.codectype = prog->i_vformat;
@@ -1372,6 +1381,14 @@ static int start_playback(void *params, int scrambled, int pause)
        //PLAY_DBG(" TsPlayer set Syncmode FREERUN %s, result(%d)", (result)? "FAIL" : "OK", result);
        result = AmTsPlayer_setSyncMode(tsplayer_handle, TS_SYNC_VMASTER );
        INF( " TsPlayer set Syncmode PCRMASTER %s, result(%d)\n", (result)? "FAIL" : "OK", result);
+
+#ifdef ANDROID
+       am_tsplayer_audio_patch_manage_mode audio_mode = AUDIO_PATCH_MANAGE_FORCE_ENABLE;
+       result = AmTsPlayer_setParams(tsplayer_handle,
+				AM_TSPLAYER_KEY_SET_AUDIO_PATCH_MANAGE_MODE,
+				&audio_mode);
+       INF( " TsPlayer set audio patch %s, result(%d)\n", (result)? "FAIL" : "OK", result);
+#endif
        play_params.playback_handle = (Playback_DeviceHandle_t)tsplayer_handle;
        play.player_session = tsplayer_handle;
     }
@@ -1408,7 +1425,7 @@ static int start_playback(void *params, int scrambled, int pause)
 
 static int pause_playback(void)
 {
-    int error;
+    int error = 0;
 
     if (play.dvr_session) {
 	error = dvr_wrapper_pause_playback(play.dvr_session);
@@ -1420,7 +1437,7 @@ static int pause_playback(void)
 
 static int resume_playback(void)
 {
-    int error;
+    int error = 0;
 
     if (play.dvr_session) {
 	error = dvr_wrapper_resume_playback(play.dvr_session);
@@ -1503,6 +1520,10 @@ static int cas_test_term(void)
     } else if (has_playback(mode)) {
         stop_playback();
     }
+#ifdef ANDROID
+    property_set("vendor.amtsplayer.pipeline", "1");
+    property_set("vendor.dtv.audio.skipamadec", "true");
+#endif
 
     return 0;
 }
@@ -1599,6 +1620,11 @@ int main(int argc, char *argv[])
     }
 
     INF("@@@in cas_hal_test mode = %d\n", mode);
+
+#ifdef ANDROID
+    property_set("vendor.amtsplayer.pipeline", "0");
+    property_set("vendor.dtv.audio.skipamadec", "false");
+#endif
 
     ret = dvb_init();
     if (!ret) {
