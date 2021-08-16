@@ -1477,6 +1477,7 @@ static int stop_playback(void)
 {
     dvr_wrapper_stop_playback((DVR_WrapperPlayback_t *)play.dvr_session);
     if (play.cas_session) {
+        AM_CA_DVRStopReplay(play.cas_session);
         AM_CA_DestroySecmem(play.cas_session, play.secmem_session);
         AM_CA_CloseSession(play.cas_session);
     }
