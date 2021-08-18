@@ -27,7 +27,11 @@
 #ifndef _AM_CAS_INTERNAL_H
 #define _AM_CAS_INTERNAL_H
 
+#ifdef ANDROID
+#define AM_NVM_FILE				"/mnt/vendor/param/vmx_nvram"
+#else
 #define AM_NVM_FILE				"/data/vmx_nvram"
+#endif
 
 #define CAS_HAL_VER "0.1.0"
 
