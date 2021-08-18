@@ -25,6 +25,8 @@ LOCAL_SRC_FILES := \
 LOCAL_C_INCLUDES := \
 		$(LOCAL_PATH)/include
 
+LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
+
 LOCAL_SHARED_LIBRARIES += liblog\
   libcutils \
   libutils
@@ -48,6 +50,8 @@ LOCAL_SRC_FILES := \
 
 LOCAL_C_INCLUDES := \
 		$(LOCAL_PATH)/include
+
+LOCAL_EXPORT_C_INCLUDE_DIRS := $(LOCAL_PATH)/include
 
 LOCAL_SHARED_LIBRARIES += liblog\
   libcutils \
