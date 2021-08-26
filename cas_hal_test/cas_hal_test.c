@@ -766,6 +766,10 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
             dvr_wrapper_close_record(recorder_session);
             return -1;
         }
+        error = AM_CA_RegisterEventCallback(recorder[dev_no].cas_session, cas_event_cb);
+        if (error) {
+            ERR("CAS RegisterEventCallback failed. ret = %d\r\n", error);
+        }
 
 	if (g_vm_config.run) {
 		watermark_test_config(g_vm_config.on,
@@ -921,12 +925,13 @@ static int show_boxid(void)
     return 0;
 }
 
-static int check_pin(char *pin, uint8_t pinIndex, uint8_t reason)
+static int check_pin(char *pin, uint8_t pinIndex, uint8_t reason, uint8_t dvrChannel)
 {
     cJSON *input = NULL;
     cJSON *item = NULL;
     char in_json[MAX_JSON_LEN];
     char out_json[MAX_JSON_LEN];
+    CasSession cas_session;
 
     input = cJSON_CreateObject();
     item = cJSON_CreateString(VMX_CAS_STRING);
@@ -942,8 +947,15 @@ static int check_pin(char *pin, uint8_t pinIndex, uint8_t reason)
 
     cJSON_PrintPreallocated(input, in_json, MAX_JSON_LEN, 1);
     INF("in_json:\n%s\n", in_json);
-    if (play.cas_session) {
-	AM_CA_Ioctl(play.cas_session, in_json, out_json, MAX_JSON_LEN);
+    if (dvrChannel == 0) {
+        cas_session = recorder[0].cas_session;
+    }else if (dvrChannel == 1) {
+        cas_session = recorder[1].cas_session;
+    }else {
+        cas_session = play.cas_session;
+    }
+    if (cas_session) {
+	AM_CA_Ioctl(cas_session, in_json, out_json, MAX_JSON_LEN);
 	INF("out_json:\n%s\n", out_json);
     }
 
@@ -1928,13 +1940,14 @@ int main(int argc, char *argv[])
 		    output_control_test_config(flag, analog, cgmsa, emicci);
 		}
 	    } else if (!strncmp(buf, "pin", 3)) {
-		uint8_t pinIndex, reason;
+		uint8_t pinIndex, reason, dvrChannel;
 		char pin[64];
 
-		ret = sscanf(buf, "pin %s %hhu %hhu", pin, &pinIndex, &reason);
-		if (ret == 3) {
-			check_pin(pin, pinIndex, reason);
-		}
+		dvrChannel = 255;
+		ret = sscanf(buf, "pin %s %hhu %hhu %hhu", pin, &pinIndex, &reason, &dvrChannel);
+		if (ret >= 3) {
+            check_pin(pin, pinIndex, reason, dvrChannel);
+        }
 	    } else if (!strncmp(buf, "svp", 3)) {
 		size_t addr;
 		ret = sscanf(buf, "svp 0x%x", &addr);
