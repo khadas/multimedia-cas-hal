@@ -189,6 +189,7 @@ AM_RESULT AM_CA_OpenSession(CasHandle handle, CasSession* session, CA_SERVICE_TY
 AM_RESULT AM_CA_CloseSession(CasSession session)
 {
     CAS_ASSERT(session);
+    AM_RESULT rc =AM_ERROR_GENERAL_ERORR;
 
     if (((CAS_SessionInfo_t *)session)->is_descrambling) {
 	if (cas_ops && cas_ops->stop_descrambling) {
@@ -196,10 +197,10 @@ AM_RESULT AM_CA_CloseSession(CasSession session)
 	    cas_ops->stop_descrambling(session);
 	}
     }
-
+    rc = cas_ops->close_session(session);
     free((void *)session);
-
-    return cas_ops->close_session(session);
+    CA_DEBUG(0, "shenghui 0902_1 change");
+    return rc;
 }
 
 /**\brief Start descrambling for the specified session of the CA system
