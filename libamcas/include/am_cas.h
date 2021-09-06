@@ -45,6 +45,10 @@ extern "C" {
                                         CA_DEBUG(2, "%s, Null poiter. Line %d\n", __func__, __LINE__); \
                                         return AM_ERROR_GENERAL_ERORR; \
                                   }
+#define CAS_FUNC(func)            if (func == NULL) { \
+                                        CA_DEBUG(2, "%s, unsupport function. Line %d\n", __func__, __LINE__); \
+                                        return AM_ERROR_NOT_SUPPORTED; \
+                                  }
 #define MAX_CHAN_COUNT (8)
 #define MAX_DATA_LEN (8)
 #define MAX_LOCATION_SIZE     512
