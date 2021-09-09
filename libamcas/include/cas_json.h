@@ -83,5 +83,7 @@
 #define ITEM_BOXID		"boxid"
 #define ITEM_GETBOXID		"GetBoxID"
 
+#define ITEM_PATH_TYPE		"pathType"
+
 #define MAX_JSON_LEN (1024)
 
