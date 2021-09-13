@@ -89,8 +89,9 @@ static int aml_open_session(CasHandle handle, CasSession session)
 static int aml_close_session(CasSession session)
 {
     AML_PrivateInfo_t *aml_priv_info = NULL;
-
+    CAS_ASSERT(session);
     aml_priv_info = ((CAS_SessionInfo_t *)session)->private_data;
+    CAS_ASSERT(aml_priv_info);
     free(aml_priv_info);
     ((CAS_SessionInfo_t *)session)->private_data = NULL;
 
