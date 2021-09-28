@@ -127,11 +127,14 @@ static int aml_enc_open_session(CasHandle handle, CasSession session, CA_SERVICE
 
 static int aml_enc_close_session(CasSession session)
 {
+    CAS_ASSERT(session);
     aenc_sess_t *p_sess = (aenc_sess_t *)((CAS_SessionInfo_t *)session)->private_data;
-
+    CAS_ASSERT(p_sess);
+    CAS_ASSERT(p_sess->p_des);
     CA_DEBUG(0, "[aml_enc]session close [%p]", p_sess);
     AM_CRYPT_des_close(p_sess->p_des);
     free(p_sess);
+    ((CAS_SessionInfo_t *)session)->private_data = NULL;
 
     return 0;
 }
