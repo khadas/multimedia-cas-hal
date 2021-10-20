@@ -1739,6 +1739,8 @@ int main(int argc, char *argv[])
     system(cmd);
     sprintf(cmd, "echo 1 > /sys/class/graphics/fb0/blank");
     system(cmd);
+    sprintf(cmd, "echo 1 > /sys/class/graphics/fb1/blank");
+    system(cmd);
 
     sprintf(cmd, " echo 1 > /sys/kernel/debug/dri/0/vpu/blank");
     system(cmd);
