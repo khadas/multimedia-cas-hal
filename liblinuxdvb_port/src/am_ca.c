@@ -12,6 +12,7 @@
 #include <errno.h>
 #include "ca.h"
 #include "am_ca.h"
+#include "am_cas.h"
 
 #define MAX_DSC_DEV        32
 #define DEV_NAME "/dev/dvb0.ca"
@@ -40,31 +41,37 @@ int ca_open (int devno)
 	}
 	if (rec_dsc_dev[devno].used)
 		return 0;
-	
+
 	snprintf(buf, sizeof(buf), DEV_NAME"%d", devno);
 	fd = open(buf, O_RDWR);
 	if(fd==-1)
 	{
 		printf("cannot open \"%s\" (%d:%s)", DEV_NAME, errno, strerror(errno));
+		CA_DEBUG(1, "ca_open() failed to open '%s%d' (%d:%s)",
+			DEV_NAME, devno, errno, strerror(errno));
 		return 0;
 	}
+
+	CA_DEBUG(1, "ca_open() '%s%d' success! fd=0x%x", DEV_NAME, devno, fd);
 	rec_dsc_dev[devno].fd = fd;
 	rec_dsc_dev[devno].used = 1;
 	return 0;
 }
 
 int ca_alloc_chan (int devno, unsigned int pid, int algo, int dsc_type)
-{	
+{
 	int ret = 0;
 	int fd = 0;
 	struct ca_sc2_descr_ex desc;
-
-	printf("ca_alloc_chan dev:%d, pid:0x%0x, algo:%d, dsc_type:%d\n", devno, pid, algo, dsc_type);
+	memset(&desc, 0, sizeof(desc));
+	CA_DEBUG(1, "ca_alloc_chan() dev:%d, pid:0x%0x, algo:%d, dsc_type:%d loop:0\n",
+		devno, pid, algo, dsc_type);
 	desc.cmd = CA_ALLOC;
 	desc.params.alloc_params.pid = pid;
 	desc.params.alloc_params.algo = algo;
 	desc.params.alloc_params.dsc_type = dsc_type;
 	desc.params.alloc_params.ca_index = -1;
+	desc.params.alloc_params.loop = 0;
 
 	if (devno >= MAX_DSC_DEV || !rec_dsc_dev[devno].used) {
 		return -1;
@@ -72,10 +79,10 @@ int ca_alloc_chan (int devno, unsigned int pid, int algo, int dsc_type)
 	fd = rec_dsc_dev[devno].fd;
 	ret = ioctl(fd, CA_SC2_SET_DESCR_EX, &desc);
 	if (ret != 0) {
-		printf(" ca_alloc_chan ioctl fail, ret:0x%0x\n", ret);
+		CA_DEBUG(1, "ca_alloc_chan() ioctl fail, ret:0x%0x\n", ret);
 		return -1;
 	}
-	printf("ca_alloc_chan, index:%d\n",desc.params.alloc_params.ca_index);
+	CA_DEBUG(1, "ca_alloc_chan() success index:%d\n",desc.params.alloc_params.ca_index);
 	return desc.params.alloc_params.ca_index;
 }
 
@@ -85,7 +92,7 @@ int ca_free_chan (int devno, int index)
 	int fd = rec_dsc_dev[devno].fd;
 	struct ca_sc2_descr_ex desc;
 
-	printf("ca_free_chan:%d, index:%d\n", devno, index);
+	CA_DEBUG(1, "ca_free_chan() devno: %d, index:%d\n", devno, index);
 	desc.cmd = CA_FREE;
 	desc.params.free_params.ca_index = index;
 
@@ -95,11 +102,11 @@ int ca_free_chan (int devno, int index)
 	fd = rec_dsc_dev[devno].fd;
 	ret = ioctl(fd, CA_SC2_SET_DESCR_EX, &desc);
 	if (ret != 0) {
-		printf(" ca_free_chan ioctl fail\n");
+		CA_DEBUG(1, "ca_free_chan() ioctl fail devno: %d, index:%d\n", devno, index);
 		return -1;
 	}
-	printf("ca_free_chan, index:%d\n",index);
-	return 0;	
+	//CA_DEBUG(1, "ca_free_chan() devno: %d, index:%d\n",devno, index);
+	return 0;
 }
 
 
@@ -109,7 +116,7 @@ int ca_set_key (int devno, int index, int parity, int key_index)
 	int fd = 0;
 	struct ca_sc2_descr_ex desc;
 
-	printf("ca_set_key dev:%d, index:%d, parity:%d, key_index:%d\n",
+	CA_DEBUG(1, "ca_set_key() dev:%d, index:%d, parity:%d, key_index:%d\n",
 			devno, index, parity, key_index);
 	desc.cmd = CA_KEY;
 	desc.params.key_params.ca_index = index;
@@ -122,18 +129,18 @@ int ca_set_key (int devno, int index, int parity, int key_index)
 	fd = rec_dsc_dev[devno].fd;
 	ret = ioctl(fd, CA_SC2_SET_DESCR_EX, &desc);
 	if (ret != 0) {
-		printf(" ca_set_key ioctl fail, ret:0x%0x\n", ret);
+		CA_DEBUG(1, "ca_set_key() ioctl fail, ret:0x%0x\n", ret);
 		return -1;
 	}
-	printf("ca_set_key, index:%d, parity:%d, key_index:%d\n",index, parity, key_index);
-	return 0;	
+	//CA_DEBUG(1, "ca_set_key(), index:%d, parity:%d, key_index:%d\n",index, parity, key_index);
+	return 0;
 }
 
 int ca_close (int devno)
 {
 	int fd = 0;
 
-	printf("ca_close dev:%d\n", devno);
+	CA_DEBUG(1, "ca_close() dev:%d\n", devno);
 	if (devno >= MAX_DSC_DEV || !rec_dsc_dev[devno].used) {
 		return -1;
 	}
