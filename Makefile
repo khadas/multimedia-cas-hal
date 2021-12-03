@@ -1,4 +1,4 @@
-OUTPUT_FILES := libcJSON.a liblinuxdvb_port.a libamcas.a libaml_enc_dvb.so cas_hal_test_bin
+OUTPUT_FILES := libcJSON.a liblinuxdvb_port.a libamcas.a cas_hal_test_bin
 
 CFLAGS  := -Wall -O2 -fPIC -IlibcJSON -Ilibamcas/include -Iliblinuxdvb_port/include -I$(STAGING_DIR)/usr/include/libdvr
 LDFLAGS := -L$(TARGET_DIR)/usr/lib -lamdvr -lmediahal_tsplayer -laudio_client -llog -lpthread -ldl
@@ -19,13 +19,6 @@ ALL_OBJS += $(LIBLINUXDVB_PORT_OBJS)
 LIBAMCAS_SRCS := libamcas/src/am_cas.c
 LIBAMCAS_OBJS := $(patsubst %.c,%.o,$(LIBAMCAS_SRCS))
 ALL_OBJS += $(LIBAMCAS_OBJS)
-
-LIBAML_ENC_DVB_SRCS := \
-	aml_enc/am_crypt.c\
-	aml_enc/aml_enc_main.c\
-	aml_enc/des.c
-LIBAML_ENC_DVB_OBJS := $(patsubst %.c,%.o,$(LIBAML_ENC_DVB_SRCS))
-ALL_OBJS += $(LIBAML_ENC_DVB_OBJS)
 
 CAS_HAL_TEST_SRCS := \
 	cas_hal_test/cas_hal_test.c\
@@ -48,9 +41,6 @@ liblinuxdvb_port.a: $(LIBLINUXDVB_PORT_OBJS)
 
 libamcas.a: $(LIBAMCAS_OBJS)
 	$(AR) rcs $@ $(LIBAMCAS_OBJS)
-
-libaml_enc_dvb.so: $(LIBAML_ENC_DVB_OBJS) libcJSON.a liblinuxdvb_port.a libamcas.a
-	$(CC) -shared -o $@ $(LIBAML_ENC_DVB_OBJS) -L. -llinuxdvb_port -lcJSON  $(LDFLAGS)
 
 cas_hal_test_bin: $(CAS_HAL_TEST_OBJS) libcJSON.a liblinuxdvb_port.a libamcas.a
 	$(CC) -o $@ $(CAS_HAL_TEST_OBJS) -L. -lamcas -lcJSON -llinuxdvb_port $(LDFLAGS)
