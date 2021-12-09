@@ -58,7 +58,7 @@ int loadCASLibrary(void)
 	while ((dp = readdir(dir))) {
 		const char *pfile = strrchr(dp->d_name, '_');
 		if (pfile && (!strcmp(pfile, "_dvb.so"))) {
-			CA_DEBUG(0, "CAS plugin %s\/%s found", path[i], dp->d_name);
+			CA_DEBUG(0, "CAS plugin %s/%s found", path[i], dp->d_name);
 		} else {
 			continue;
 		}
@@ -76,8 +76,8 @@ int loadCASLibrary(void)
 		}
 
 		if (strcmp(cas_ops->get_version(), CAS_HAL_VER)) {
-			CA_DEBUG(1, "%s cas library[%s] and cas hal[%s] not matched",
-				 cas_ops->get_version(), CAS_HAL_VER);
+			CA_DEBUG(1, "cas library[%s] and cas hal not matched",
+				 cas_ops->get_version());
 			dlclose(dl_handle);
 			continue;
 		}

@@ -244,7 +244,7 @@ int dmd_lock_s(int fe_fd, const dmd_delivery_t * pDelivery, dmd_lnb_tone_state_t
    p[cmd_num].u.data = pDelivery->delivery.satellite.modulation_system == DMD_MODSYS_DVBS2 ? SYS_DVBS2 : SYS_DVBS;
    cmd_num++;
    p[cmd_num].cmd = DTV_FREQUENCY;
-   p[cmd_num].u.data = abs(pDelivery->delivery.satellite.frequency - pDelivery->delivery.satellite.band.lo);
+   p[cmd_num].u.data = pDelivery->delivery.satellite.frequency - pDelivery->delivery.satellite.band.lo;
    printf("tune to %d\n", p[cmd_num].u.data);
    cmd_num++;
 

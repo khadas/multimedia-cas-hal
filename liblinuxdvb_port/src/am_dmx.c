@@ -116,7 +116,7 @@ static void* dmx_data_thread(void *arg)
 		filter = &dmx->filter[fids[i]];
 		if (!filter->enable || !filter->used || filter->need_free)
 		{
-		    CA_DEBUG(1, "ch[%d] not used, not read", fids[i], len);
+		    CA_DEBUG(1, "ch[%d] not used, not read", fids[i]);
 		    len = 0;
 		}
 		else

@@ -95,7 +95,6 @@ static void *inject_thread(void *arg)
 	    store_reg[i].end);
     }
     while (gInjectRunning) {
-	int size;
         int retry = 100;
 	int kRwSize = 0;
         am_tsplayer_result res;
@@ -312,7 +311,7 @@ int ext_dvr_playback(const char *path, CasHandle cas_handle)
     }
 	INF( "Starting playback\n");
 
-	pthread_create(&gInjectThread, NULL, inject_thread, path);
+	pthread_create(&gInjectThread, NULL, inject_thread, (void *)path);
 
     return 0;
 }

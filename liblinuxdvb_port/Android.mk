@@ -38,7 +38,7 @@ LOCAL_SHARED_LIBRARIES += liblog \
   libcutils \
   libutils
 
-LOCAL_CFLAGS += -O0
+LOCAL_CFLAGS += -O0 -Werror
 
 ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 30&& echo OK),OK)
     LOCAL_PROPRIETARY_MODULE := true

@@ -24,9 +24,6 @@
 extern "C" {
 #endif
 
-#ifndef CA_DEBUG_LEVEL
-#define CA_DEBUG_LEVEL 1000
-#endif
 #include <android/log.h>
 #ifndef TAG_EXT
 #define TAG_EXT

@@ -31,7 +31,7 @@ LOCAL_SHARED_LIBRARIES += liblog\
   libcutils \
   libutils
 
-LOCAL_CFLAGS += -O0
+LOCAL_CFLAGS += -O0 -Werror
 
 ifeq ($(shell test $(PLATFORM_SDK_VERSION) -eq 29 && echo OK),OK)
     LOCAL_PRODUCT_MODULE := true
@@ -57,6 +57,6 @@ LOCAL_SHARED_LIBRARIES += liblog\
   libcutils \
   libutils
 
-LOCAL_CFLAGS += -O0
+LOCAL_CFLAGS += -O0 -Werror
 
 include $(BUILD_STATIC_LIBRARY)

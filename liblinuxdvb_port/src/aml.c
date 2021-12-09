@@ -26,6 +26,7 @@
 #include <poll.h>
 #include <string.h>
 #include <unistd.h>
+#include <stdio.h>
 #include <sys/ioctl.h>
 #include "amsmc.h"
 #include "am_cas.h"
@@ -38,7 +39,7 @@
 /****************************************************************************
  * Static functions declaration
  ***************************************************************************/
- 
+
 static int aml_open (AM_SMC_Device_t *dev, const AM_SMC_OpenPara_t *para);
 static int aml_close (AM_SMC_Device_t *dev);
 static int aml_get_status (AM_SMC_Device_t *dev, AM_SMC_CardStatus_t *status);
