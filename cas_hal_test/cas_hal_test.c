@@ -133,6 +133,7 @@ static int size=1024*1024*1024;
 static char *pfilename = "/data/data/timeshifting.ts";
 static int check_pin_status = PIN_MAX;
 static int rec_status = 0;
+static int32_t seclev = AM_TSPLAYER_DMX_FILTER_SEC_LEVEL2;
 
 enum {
     LIVE        = 0x01,
@@ -231,9 +232,7 @@ int init_tsplayer_inject(dvb_service_info_t *prog)
     memset(&aparam, 0, sizeof(aparam));
     aparam.codectype = prog->i_aformat;
     aparam.pid = prog->i_audio_pid;
-    //aparam.seclevel = 10;
     ret |= AmTsPlayer_setAudioParams(session, &aparam);
-
     if (vparam.pid != 0 && vparam.pid != 0x1fff) {
         ret |= AmTsPlayer_startVideoDecoding(session);
 	ret |= AmTsPlayer_showVideo(session);
@@ -650,6 +649,11 @@ static int start_liveplay(dvb_service_info_t *prog)
         return -1;
     }
     play.player_session = player_session;
+    if (prog->scrambled) {
+        AmTsPlayer_setParams(player_session, AM_TSPLAYER_KEY_VIDEO_SECLEVEL, &seclev);
+        AmTsPlayer_setParams(player_session, AM_TSPLAYER_KEY_AUDIO_SECLEVEL, &seclev);
+        CA_DEBUG(1,"%s secure level: %#x\n ", __func__, seclev);
+    }
 
     ret = AmTsPlayer_getInstansNo(player_session, &num);
     ret |= AmTsPlayer_setWorkMode(player_session, TS_PLAYER_MODE_NORMAL);
@@ -672,7 +676,6 @@ static int start_liveplay(dvb_service_info_t *prog)
     memset(&aparam, 0, sizeof(aparam));
     aparam.codectype = prog->i_aformat;
     aparam.pid = prog->i_audio_pid;
-    //aparam.seclevel = 10;
     AmTsPlayer_setAudioParams(player_session, &aparam);
     AmTsPlayer_startAudioDecoding(player_session);
 
@@ -1388,6 +1391,11 @@ static int start_playback(void *params, int scrambled, int pause)
        result = AmTsPlayer_registerCb(tsplayer_handle,
           tsplayer_callback,
           "tsp0");
+       if (scrambled) {
+           AmTsPlayer_setParams(tsplayer_handle, AM_TSPLAYER_KEY_VIDEO_SECLEVEL, &seclev);
+           AmTsPlayer_setParams(tsplayer_handle, AM_TSPLAYER_KEY_AUDIO_SECLEVEL, &seclev);
+           CA_DEBUG(1,"%s secure level: %#x\n ", __func__, seclev);
+       }
 
        result = AmTsPlayer_setWorkMode(tsplayer_handle, TS_PLAYER_MODE_NORMAL);
        INF( " TsPlayer set Workmode NORMAL %s, result(%d)\n", (result)? "FAIL" : "OK", result);

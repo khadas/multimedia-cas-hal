@@ -26,6 +26,7 @@ static SecMemHandle secmem_session;
 static void *sec_buf;
 static int gInjectRunning = 1;
 static AM_CA_StoreRegion_t store_reg[16];
+static int32_t seclev = AM_TSPLAYER_DMX_FILTER_SEC_LEVEL2;
 
 #define INJECT_LENGTH (188*1024)
 static void *inject_thread(void *arg)
@@ -276,6 +277,9 @@ int ext_dvr_playback(const char *path, CasHandle cas_handle)
           versionM, versionL,
           (result)? "FAIL" : "OK",
           result);
+
+       AmTsPlayer_setParams(tsplayer_handle, AM_TSPLAYER_KEY_VIDEO_SECLEVEL, &seclev);
+       AmTsPlayer_setParams(tsplayer_handle, AM_TSPLAYER_KEY_AUDIO_SECLEVEL, &seclev);
 
        result = AmTsPlayer_registerCb(tsplayer_handle,
           tsplayer_callback,
