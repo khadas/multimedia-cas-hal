@@ -85,5 +85,9 @@
 
 #define ITEM_PATH_TYPE		"pathType"
 
+#define ITEM_DVR_CAS_MODE   "casMode"
+#define ITEM_GET_CAS_MODE   "getCasMode"
+
+
 #define MAX_JSON_LEN (1024)
 

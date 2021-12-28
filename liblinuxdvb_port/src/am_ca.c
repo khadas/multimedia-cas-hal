@@ -136,6 +136,34 @@ int ca_set_key (int devno, int index, int parity, int key_index)
 	return 0;
 }
 
+
+int ca_set_scb(int devno, int index, int scb, int scb_as_is)
+{
+	int ret = 0;
+	int fd = 0;
+	struct ca_sc2_descr_ex desc;
+
+	CA_DEBUG(1,"ca_set_scb, index:%d, :%d, :%d\n", index, scb, scb_as_is);
+
+	desc.cmd = CA_SET_SCB;
+	desc.params.scb_params.ca_index = index;
+	desc.params.scb_params.ca_scb = scb;
+	desc.params.scb_params.ca_scb_as_is = scb_as_is;
+
+	if (devno >= MAX_DSC_DEV || !rec_dsc_dev[devno].used) {
+		CA_DEBUG(1, " ca_set_scb fail\n");
+		return -1;
+	}
+	fd = rec_dsc_dev[devno].fd;
+	ret = ioctl(fd, CA_SC2_SET_DESCR_EX, &desc);
+	if (ret != 0) {
+		CA_DEBUG(1, " ca_set_scb ioctl fail, ret:0x%0x\n", ret);
+		return -1;
+	}
+
+	return 0;
+}
+
 int ca_close (int devno)
 {
 	int fd = 0;

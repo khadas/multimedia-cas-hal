@@ -31,6 +31,13 @@ else
     LOCAL_SHARED_LIBRARIES += libteec_sys libmediahal_tsplayer.system libamdvr.product
 endif
 
+## ASAN debug
+#LOCAL_SANITIZE:=address
+#LOCAL_CPPFLAGS += -fsanitize=$(LOCAL_SANITIZE) -fno-omit-frame-pointer -fsanitize-recover=$(LOCAL_SANITIZE)
+#LOCAL_CFLAGS += -fsanitize=$(LOCAL_SANITIZE) -fno-omit-frame-pointer -fsanitize-recover=$(LOCAL_SANITIZE)
+#LOCAL_LDFLAGS += -fsanitize=$(LOCAL_SANITIZE)
+#LOCAL_ARM_MODE :=arm
+
 LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE:= cas_hal_test
 LOCAL_MULTILIB := 32

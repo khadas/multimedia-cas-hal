@@ -65,6 +65,8 @@ typedef enum {
 	SERVICE_LIVE_PLAY,     /**< Live playing.*/
 	SERVICE_PVR_RECORDING, /**< PVR recording.*/
 	SERVICE_PVR_PLAY,      /**< PVR playback.*/
+	SERVICE_PVR_TIMESHIFT_RECORDING, /**< PVR recording for timeshift.*/
+	SERVICE_PVR_TIMESHIFT_PLAY, /**< PVR play for timeshift.*/
 	SERVICE_TYPE_INVALID   /**< Invalid type.*/
 }CA_SERVICE_TYPE_t;
 
