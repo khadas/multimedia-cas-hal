@@ -134,6 +134,7 @@ static char *pfilename = "/data/data/timeshifting.ts";
 static int check_pin_status = PIN_MAX;
 static int rec_status = 0;
 static int32_t seclev = AM_TSPLAYER_DMX_FILTER_SEC_LEVEL2;
+static uint32_t video_tunnel_id = 0;
 
 enum {
     LIVE        = 0x01,
@@ -220,6 +221,7 @@ int init_tsplayer_inject(dvb_service_info_t *prog)
     am_tsplayer_init_params  parm = {tsType, drmmode, 0, 0};
 
     ret = AmTsPlayer_create(parm, &session);
+    ret |= AmTsPlayer_setSurface(session, (void *)&video_tunnel_id);
     ret |= AmTsPlayer_setWorkMode(session, TS_PLAYER_MODE_NORMAL);
     ret |= AmTsPlayer_registerCb(session, video_callback, NULL);
 
@@ -655,7 +657,8 @@ static int start_liveplay(dvb_service_info_t *prog)
         CA_DEBUG(1,"%s secure level: %#x\n ", __func__, seclev);
     }
 
-    ret = AmTsPlayer_getInstansNo(player_session, &num);
+    ret = AmTsPlayer_setSurface(player_session, (void *)&video_tunnel_id);
+    ret |= AmTsPlayer_getInstansNo(player_session, &num);
     ret |= AmTsPlayer_setWorkMode(player_session, TS_PLAYER_MODE_NORMAL);
     ret |= AmTsPlayer_registerCb(player_session, video_callback, NULL);
     ret |= AmTsPlayer_setSyncMode(player_session, avsyncmode);
@@ -1382,6 +1385,8 @@ static int start_playback(void *params, int scrambled, int pause)
           AmTsPlayer_create(init_param, &tsplayer_handle);
        INF( "open TsPlayer %s, result(%d)\n", (result)? "FAIL" : "OK", result);
 
+       result = AmTsPlayer_setSurface(tsplayer_handle, (void *)&video_tunnel_id);
+       INF( "set surface %s, result(%d)\n", (result)? "FAIL" : "OK", result);
        result = AmTsPlayer_getVersion(&versionM, &versionL);
        INF( "TsPlayer verison(%d.%d) %s, result(%d)\n",
           versionM, versionL,

@@ -241,6 +241,7 @@ int ext_dvr_playback(const char *path, CasHandle cas_handle)
 	am_tsplayer_video_params vparam;
 	am_tsplayer_audio_params aparam;
 	uint32_t versionM, versionL;
+	uint32_t video_tunnel_id = 0;
 	am_tsplayer_init_params init_param =
 	{
 	  .source = TS_MEMORY,
@@ -272,6 +273,8 @@ int ext_dvr_playback(const char *path, CasHandle cas_handle)
           AmTsPlayer_create(init_param, &tsplayer_handle);
        INF( "open TsPlayer %s, result(%d)\n", (result)? "FAIL" : "OK", result);
 
+       result = AmTsPlayer_setSurface(tsplayer_handle, (void *)&video_tunnel_id);
+       INF( "TsPlayer set surface %s, result(%d)\n", (result)? "FAIL" : "OK", result);
        result = AmTsPlayer_getVersion(&versionM, &versionL);
        INF( "TsPlayer verison(%d.%d) %s, result(%d)\n",
           versionM, versionL,
