@@ -17,8 +17,8 @@ LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libam_cas
-LOCAL_MULTILIB := 32
-LOCAL_ARM_MODE := arm
+LOCAL_MULTILIB := both
+#LOCAL_ARM_MODE := arm
 LOCAL_SRC_FILES := \
     src/am_cas.c
 
@@ -43,8 +43,8 @@ include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := libam_cas_sys
-LOCAL_MULTILIB := 32
-LOCAL_ARM_MODE := arm
+LOCAL_MULTILIB := both
+#LOCAL_ARM_MODE := arm
 LOCAL_SRC_FILES := \
     src/am_cas.c
 
