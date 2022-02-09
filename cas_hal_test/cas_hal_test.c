@@ -49,6 +49,8 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <signal.h>
+#include <stdbool.h>
+
 #ifdef ANDROID
 #include <cutils/properties.h>
 #endif
