@@ -45,3 +45,31 @@ ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 30&& echo OK),OK)
 endif
 
 include $(BUILD_STATIC_LIBRARY)
+
+include $(CLEAR_VARS)
+LOCAL_MODULE := liblinuxdvb_port_sys
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0 SPDX-license-identifier-FTL SPDX-license-identifier-GPL SPDX-license-identifier-GPL-2.0 SPDX-license-identifier-LGPL SPDX-license-identifier-LGPL-2.1 SPDX-license-identifier-MIT legacy_by_exception_only legacy_notice
+LOCAL_LICENSE_CONDITIONS := by_exception_only notice restricted
+LOCAL_MULTILIB := 32
+LOCAL_ARM_MODE := arm
+LOCAL_SRC_FILES := \
+               src/am_dmx.c \
+               src/am_smc.c \
+               src/aml.c \
+               src/am_key.c \
+               src/am_ca.c
+
+LOCAL_C_INCLUDES := \
+                $(LOCAL_PATH) \
+                $(LOCAL_PATH)/include \
+                $(LOCAL_PATH)/../libamcas/include
+
+
+LOCAL_SHARED_LIBRARIES += liblog \
+                      libcutils \
+                      libutils
+
+LOCAL_CFLAGS += -O0 -Werror
+
+
+include $(BUILD_STATIC_LIBRARY)
