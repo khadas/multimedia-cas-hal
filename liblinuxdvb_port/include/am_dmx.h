@@ -6,7 +6,7 @@ extern "C"
 {
 #endif
 
-typedef void (*am_dmx_data_cb) (int dev_no, int fd, const uint8_t *data, int len, void *user_data);
+typedef void (*am_dmx_data_cb) (int dev_no, int fd, const unsigned char *data, int len, void *user_data);
 
 int am_dmx_init(void);
 int am_dmx_alloc_filter(int dev_no, int *fhandle);
