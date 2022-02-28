@@ -157,6 +157,11 @@ AM_RESULT AM_CA_Term(CasHandle handle)
         return AM_ERROR_NOT_LOAD;
     }
 
+    if (cas_ops && cas_ops->term) {
+        cas_ops->term(handle);
+        CA_DEBUG(2, "%s, after term", __func__);
+    }
+
     free((void *)handle);
     return AM_ERROR_SUCCESS;
 }
