@@ -33,18 +33,18 @@ extern "C"
 /**\brief Error code of the Smart card module*/
 enum AM_SMC_ErrorCode
 {
-	AM_SMC_ERROR_BASE = 1,
-	AM_SMC_ERR_INVALID_DEV_NO,           /**< Invalid device number*/
-	AM_SMC_ERR_BUSY,                     /**< The device has already been openned*/
-	AM_SMC_ERR_NOT_OPENNED,              /**< The device is not yet open*/
-	AM_SMC_ERR_CANNOT_OPEN_DEV,          /**< Failed to open device*/
-	AM_SMC_ERR_CANNOT_CREATE_THREAD,     /**< Creating device failure*/
-	AM_SMC_ERR_TIMEOUT,                  /**< Timeout*/
-	AM_SMC_ERR_NOT_SUPPORTED,            /**< The device does not support this function*/
-	AM_SMC_ERR_IO,                       /**< Device input or output errors*/
-	AM_SMC_ERR_BUF_TOO_SMALL,            /**< Buffer too small*/
-	AM_SMC_ERR_NO_CARD,                  /**< Smart card not inserted*/
-	AM_SMC_ERR_END
+    AM_SMC_ERROR_BASE = 1,
+    AM_SMC_ERR_INVALID_DEV_NO,           /**< Invalid device number*/
+    AM_SMC_ERR_BUSY,                     /**< The device has already been openned*/
+    AM_SMC_ERR_NOT_OPENNED,              /**< The device is not yet open*/
+    AM_SMC_ERR_CANNOT_OPEN_DEV,          /**< Failed to open device*/
+    AM_SMC_ERR_CANNOT_CREATE_THREAD,     /**< Creating device failure*/
+    AM_SMC_ERR_TIMEOUT,                  /**< Timeout*/
+    AM_SMC_ERR_NOT_SUPPORTED,            /**< The device does not support this function*/
+    AM_SMC_ERR_IO,                       /**< Device input or output errors*/
+    AM_SMC_ERR_BUF_TOO_SMALL,            /**< Buffer too small*/
+    AM_SMC_ERR_NO_CARD,                  /**< Smart card not inserted*/
+    AM_SMC_ERR_END
 };
 
 /****************************************************************************
@@ -54,10 +54,10 @@ enum AM_SMC_ErrorCode
 /**\brief Event type of Smart card module*/
 enum AM_SMC_EventType
 {
-	AM_SMC_EVT_BASE=0,
-	AM_SMC_EVT_CARD_IN,                  /**< Smart card insert*/
-	AM_SMC_EVT_CARD_OUT,                 /**< Smart card pull out*/
-	AM_SMC_EVT_END
+    AM_SMC_EVT_BASE=0,
+    AM_SMC_EVT_CARD_IN,                  /**< Smart card insert*/
+    AM_SMC_EVT_CARD_OUT,                 /**< Smart card pull out*/
+    AM_SMC_EVT_END
 };
 
 
@@ -68,14 +68,14 @@ enum AM_SMC_EventType
 /**\brief Smart card device enable parameter*/
 typedef struct
 {
-	int  enable_thread;                  /**< check the thread of check smart card status is enable*/
+    int  enable_thread;                  /**< check the thread of check smart card status is enable*/
 } AM_SMC_OpenPara_t;
 
 /**\brief Insert Status type of smart card */
 typedef enum
 {
-	AM_SMC_CARD_OUT, /**< Smart card pull out*/
-	AM_SMC_CARD_IN   /**< Smart card insert*/
+    AM_SMC_CARD_OUT, /**< Smart card pull out*/
+    AM_SMC_CARD_IN   /**< Smart card insert*/
 } AM_SMC_CardStatus_t;
 
 /**\brief Smart card status callback*/
@@ -84,22 +84,22 @@ typedef void (*AM_SMC_StatusCb_t) (int dev_no, AM_SMC_CardStatus_t status, void 
 /** brief Smart card device parameter*/
 typedef struct
 {
-	int     f;                 /**<Clock frequency conversion coefficient*/
-	int     d;                 /**<baud rate coefficient*/
-	int     n;                 /**<the N parameter is used to provide extra guard time between characters.*/
-	int     bwi;               /**<The BWI is used to define the Block Wait Time*/
-	int     cwi;               /**<The CWT is defined as the wait time between characters*/
-	int     bgt;               /**<Block Guard Time*/
-	int     freq;              /**<clock frequency*/
-	int     recv_invert;       /**<1:invert the data bits (excluding the parity) during receiving*/
-	int     recv_lsb_msb;      /**<1:Swap MSBits / Lsbits during receiving*/
-	int     recv_no_parity;    /**<Ignore parity,This is useful during debug*/
-	int     recv_parity;			 /**< 1:Invert Parity during receiving*/
-	int     xmit_invert;       /**<1:invert the data bits (excluding the parity)*/
-	int     xmit_lsb_msb;      /**<1:Swap MSBits / LSbits*/
-	int     xmit_retries;      /**<Number of attempts to make sending a character.*/
-	int     xmit_repeat_dis;   /**<Set this bit to 1 to disable character repeats when an error is detected.*/
-	int     xmit_parity;			 /**<1:Invert Parity*/
+    int     f;                 /**<Clock frequency conversion coefficient*/
+    int     d;                 /**<baud rate coefficient*/
+    int     n;                 /**<the N parameter is used to provide extra guard time between characters.*/
+    int     bwi;               /**<The BWI is used to define the Block Wait Time*/
+    int     cwi;               /**<The CWT is defined as the wait time between characters*/
+    int     bgt;               /**<Block Guard Time*/
+    int     freq;              /**<clock frequency*/
+    int     recv_invert;       /**<1:invert the data bits (excluding the parity) during receiving*/
+    int     recv_lsb_msb;      /**<1:Swap MSBits / Lsbits during receiving*/
+    int     recv_no_parity;    /**<Ignore parity,This is useful during debug*/
+    int     recv_parity;             /**< 1:Invert Parity during receiving*/
+    int     xmit_invert;       /**<1:invert the data bits (excluding the parity)*/
+    int     xmit_lsb_msb;      /**<1:Swap MSBits / LSbits*/
+    int     xmit_retries;      /**<Number of attempts to make sending a character.*/
+    int     xmit_repeat_dis;   /**<Set this bit to 1 to disable character repeats when an error is detected.*/
+    int     xmit_parity;             /**<1:Invert Parity*/
 }AM_SMC_Param_t;
 
 /****************************************************************************
