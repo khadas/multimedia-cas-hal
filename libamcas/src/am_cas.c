@@ -153,8 +153,8 @@ AM_RESULT AM_CA_Term(CasHandle handle)
     CAS_ASSERT(handle);
 
     if (!g_cas_loaded) {
-	printf("[CAS] %s failed. Not loaded\r\n", __func__);
-	return AM_ERROR_NOT_LOAD;
+        printf("[CAS] %s failed. Not loaded\r\n", __func__);
+        return AM_ERROR_NOT_LOAD;
     }
 
     free((void *)handle);
@@ -194,10 +194,10 @@ AM_RESULT AM_CA_CloseSession(CasSession session)
     CAS_ASSERT(cas_ops);
 
     if (((CAS_SessionInfo_t *)session)->is_descrambling) {
-	if (cas_ops->stop_descrambling) {
-	    ((CAS_SessionInfo_t *)session)->is_descrambling = 0;
-	    cas_ops->stop_descrambling(session);
-	}
+        if (cas_ops->stop_descrambling) {
+            ((CAS_SessionInfo_t *)session)->is_descrambling = 0;
+            cas_ops->stop_descrambling(session);
+        }
     }
     if (cas_ops->close_session) {
         ret = cas_ops->close_session(session);
@@ -220,8 +220,8 @@ AM_RESULT AM_CA_StartDescrambling(CasSession session, AM_CA_ServiceInfo_t *servi
     CAS_ASSERT(cas_ops);
 
     if (serviceInfo->stream_num > MAX_CHAN_COUNT) {
-	printf("[CAS] invalid stream_num[%#x]\r\n", serviceInfo->stream_num);
-	return AM_ERROR_OVERFLOW;
+        printf("[CAS] invalid stream_num[%#x]\r\n", serviceInfo->stream_num);
+        return AM_ERROR_OVERFLOW;
     }
 
     CAS_FUNC(cas_ops->start_descrambling);
@@ -241,9 +241,9 @@ AM_RESULT AM_CA_StopDescrambling(CasSession session)
     CAS_ASSERT(cas_ops);
 
     if (((CAS_SessionInfo_t *)session)->is_descrambling) {
-	CAS_FUNC(cas_ops->stop_descrambling);
-	((CAS_SessionInfo_t *)session)->is_descrambling = 0;
-	return cas_ops->stop_descrambling(session);
+        CAS_FUNC(cas_ops->stop_descrambling);
+        ((CAS_SessionInfo_t *)session)->is_descrambling = 0;
+        return cas_ops->stop_descrambling(session);
     }
 
     return AM_ERROR_SUCCESS;
@@ -262,7 +262,7 @@ AM_RESULT AM_CA_UpdateDescramblingPid(CasSession session, uint16_t oldStreamPid,
     CAS_ASSERT(cas_ops);
 
     if (((CAS_SessionInfo_t *)session)->is_descrambling) {
-	CAS_FUNC(cas_ops->update_descrambling_pid);
+        CAS_FUNC(cas_ops->update_descrambling_pid);
         return cas_ops->update_descrambling_pid(session, oldStreamPid, newStreamPid);
     }
 

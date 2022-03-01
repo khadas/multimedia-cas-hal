@@ -56,18 +56,18 @@ typedef unsigned char uint8_t;
 
 /**\brief Service Mode of the program*/
 typedef enum {
-	SERVICE_DVB, /**< DTV live playing.*/
-	SERVICE_IPTV /**< IPTV.*/
+    SERVICE_DVB, /**< DTV live playing.*/
+    SERVICE_IPTV /**< IPTV.*/
 }CA_SERVICE_MODE_t;
 
 /**\brief Service type of the program*/
 typedef enum {
-	SERVICE_LIVE_PLAY,     /**< Live playing.*/
-	SERVICE_PVR_RECORDING, /**< PVR recording.*/
-	SERVICE_PVR_PLAY,      /**< PVR playback.*/
-	SERVICE_PVR_TIMESHIFT_RECORDING, /**< PVR recording for timeshift.*/
-	SERVICE_PVR_TIMESHIFT_PLAY, /**< PVR play for timeshift.*/
-	SERVICE_TYPE_INVALID   /**< Invalid type.*/
+    SERVICE_LIVE_PLAY,     /**< Live playing.*/
+    SERVICE_PVR_RECORDING, /**< PVR recording.*/
+    SERVICE_PVR_PLAY,      /**< PVR playback.*/
+    SERVICE_PVR_TIMESHIFT_RECORDING, /**< PVR recording for timeshift.*/
+    SERVICE_PVR_TIMESHIFT_PLAY, /**< PVR play for timeshift.*/
+    SERVICE_TYPE_INVALID   /**< Invalid type.*/
 }CA_SERVICE_TYPE_t;
 
 /**\brief Work type.*/
@@ -87,7 +87,7 @@ typedef struct {
     CA_DVR_BufferType_t type; /**< Buffer type.*/
     size_t           addr; /**< Start address of the buffer.*/
     size_t           size; /**< Size of the buffer.*/ 
-} CA_DVR_Buffer_t; 
+} CA_DVR_Buffer_t;
 
 /**\brief ca dvr pre information*/
 typedef struct {
@@ -97,18 +97,18 @@ typedef struct {
 
 /**\brief Service descrambling information*/
 typedef struct {
-	uint16_t service_id;  /**< The service's index.*/
-	uint8_t fend_dev;     /**< The frontend device's index*/
-	uint8_t dmx_dev;      /**< The demux device's index.*/
-	uint8_t dsc_dev;      /**< The descrmabler device's index.*/
-	uint8_t dvr_dev;      /**< The DVR device's index.*/
-	CA_SERVICE_MODE_t service_mode; /**< Service mode.*/
-	CA_SERVICE_TYPE_t service_type; /**< Service type.*/
-	uint16_t ecm_pid;     /**< ECM's PID.*/
-	uint16_t stream_pids[MAX_CHAN_COUNT];  /**< Elementry streams' index.*/
-	uint32_t stream_num;  /**< Elementary streams' number.*/
-	uint8_t ca_private_data[MAX_DATA_LEN]; /**< Private data.*/
-	uint8_t ca_private_data_len;           /**< Private data's length.*/
+    uint16_t service_id;  /**< The service's index.*/
+    uint8_t fend_dev;     /**< The frontend device's index*/
+    uint8_t dmx_dev;      /**< The demux device's index.*/
+    uint8_t dsc_dev;      /**< The descrmabler device's index.*/
+    uint8_t dvr_dev;      /**< The DVR device's index.*/
+    CA_SERVICE_MODE_t service_mode; /**< Service mode.*/
+    CA_SERVICE_TYPE_t service_type; /**< Service type.*/
+    uint16_t ecm_pid;     /**< ECM's PID.*/
+    uint16_t stream_pids[MAX_CHAN_COUNT];  /**< Elementry streams' index.*/
+    uint32_t stream_num;  /**< Elementary streams' number.*/
+    uint8_t ca_private_data[MAX_DATA_LEN]; /**< Private data.*/
+    uint8_t ca_private_data_len;           /**< Private data's length.*/
 }AM_CA_ServiceInfo_t;
 
 /**\brief CAS crypto parameters*/
@@ -124,9 +124,9 @@ typedef struct AM_CA_CryptoPara_s {
 
 /**\brief Section of the table for CAS*/
 typedef enum {
-	AM_CA_SECTION_PMT,
-	AM_CA_SECTION_CAT,
-	AM_CA_SECTION_NIT,
+    AM_CA_SECTION_PMT,
+    AM_CA_SECTION_CAT,
+    AM_CA_SECTION_NIT,
 }AM_CA_SECTION;
 
 /**\brief CAS section attribute*/
@@ -144,11 +144,11 @@ typedef struct AM_CA_Store_Region_s {
 
 /**\brief Error code of the CAS-Hal module*/
 typedef enum {
-	AM_ERROR_SUCCESS,        /**< No error.*/
-	AM_ERROR_NOT_LOAD,       /**< Dynamic library is not loaded.*/
-	AM_ERROR_NOT_SUPPORTED,  /**< The CAS is not supported.*/
-	AM_ERROR_OVERFLOW,       /**< Data overflow.*/
-	AM_ERROR_GENERAL_ERORR   /**< General error.*/
+    AM_ERROR_SUCCESS,        /**< No error.*/
+    AM_ERROR_NOT_LOAD,       /**< Dynamic library is not loaded.*/
+    AM_ERROR_NOT_SUPPORTED,  /**< The CAS is not supported.*/
+    AM_ERROR_OVERFLOW,       /**< Data overflow.*/
+    AM_ERROR_GENERAL_ERORR   /**< General error.*/
 }AM_RESULT;
 
 /**Secure memory handle.*/
