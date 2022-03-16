@@ -86,7 +86,7 @@ typedef enum {
 typedef struct {
     CA_DVR_BufferType_t type; /**< Buffer type.*/
     size_t           addr; /**< Start address of the buffer.*/
-    size_t           size; /**< Size of the buffer.*/ 
+    size_t           size; /**< Size of the buffer.*/
 } CA_DVR_Buffer_t;
 
 /**\brief ca dvr pre information*/
