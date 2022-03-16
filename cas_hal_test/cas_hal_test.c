@@ -1260,7 +1260,7 @@ static int stop_recording(int dev_no)
     if (cas_session) {
         bool tse_mode = get_cas_mode(cas_session);
         AM_CA_DVRStop(cas_session);
-        if (false == tse_mode) {
+        if (!tse_mode) {
             ret = AM_CA_DestroySecmem(cas_session, recorder[dev_no].secmem_session);
             if (ret) {
                 ERR("destroy secmem failed:%d\n", ret);
@@ -1392,7 +1392,7 @@ static int start_playback(void *params, int scrambled, int pause)
         AM_CA_DVRSetPreParam(play.cas_session, &preParam);
 
         tse_mode = get_cas_mode(play.cas_session);
-        if (false == tse_mode) {
+        if (!tse_mode) {
             play.secmem_session = AM_CA_CreateSecmem(
                     play.cas_session,
                     service_type,
@@ -1460,7 +1460,7 @@ static int start_playback(void *params, int scrambled, int pause)
        if (is_timeshifting(mode)) {
            init_param.dmx_dev_id = DMX_DEV_NO_2ND;
        }
-       if (false == tse_mode) {
+       if (!tse_mode) {
            if (scrambled) {
                init_param.drmmode = TS_INPUT_BUFFER_TYPE_SECURE;
            }
@@ -1484,7 +1484,7 @@ static int start_playback(void *params, int scrambled, int pause)
        result = AmTsPlayer_registerCb(tsplayer_handle,
           tsplayer_callback,
           "tsp0");
-       if (false == tse_mode && scrambled) {
+       if (!tse_mode && scrambled) {
            AmTsPlayer_setParams(tsplayer_handle, AM_TSPLAYER_KEY_VIDEO_SECLEVEL, &seclev);
            AmTsPlayer_setParams(tsplayer_handle, AM_TSPLAYER_KEY_AUDIO_SECLEVEL, &seclev);
            CA_DEBUG(1,"%s secure level: %#x\n ", __func__, seclev);
@@ -1521,7 +1521,7 @@ static int start_playback(void *params, int scrambled, int pause)
        DVR_PlaybackFlag_t play_flag = (pause)? DVR_PLAYBACK_STARTED_PAUSEDLIVE : 0;
        play.dvr_session = (void *)player;
 
-       if (false == tse_mode) {
+       if (!tse_mode) {
            if (scrambled) {
                INF("cas playback set secure buffer:%p, secure buffer size:%#x\n",
                             sec_buf, sec_buf_size);
@@ -1595,7 +1595,7 @@ static int stop_playback(void)
     if (play.cas_session) {
         bool tse_mode = get_cas_mode(play.cas_session);
         AM_CA_DVRStopReplay(play.cas_session);
-        if (false == tse_mode) {
+        if (!tse_mode) {
             AM_CA_DestroySecmem(play.cas_session, play.secmem_session);
         }
         AM_CA_CloseSession(play.cas_session);
