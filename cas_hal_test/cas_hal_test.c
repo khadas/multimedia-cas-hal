@@ -178,6 +178,84 @@ extern int dvr_wrapper_set_playback_secure_buffer (DVR_WrapperPlayback_t playbac
                         uint32_t len);
 int amsysfs_set_sysfs_str(const char *path, const char *val);
 
+//convert am video codec fmt to dvb fmt
+bool convert_video_codec_fmt_am2dvb(am_tsplayer_video_codec am_fmt, DVR_VideoFormat_t* dvb_fmt) {
+  if (!dvb_fmt)
+    return false;
+
+  bool result = true;
+
+  switch (am_fmt)
+  {
+    case AV_VIDEO_CODEC_MPEG1:
+      *dvb_fmt = DVR_VIDEO_FORMAT_MPEG1;
+      break;
+    case AV_VIDEO_CODEC_MPEG2:
+      *dvb_fmt = DVR_VIDEO_FORMAT_MPEG2;
+      break;
+    case AV_VIDEO_CODEC_H265:
+      *dvb_fmt = DVR_VIDEO_FORMAT_HEVC;
+      break;
+    case AV_VIDEO_CODEC_H264:
+      *dvb_fmt = DVR_VIDEO_FORMAT_H264;
+      break;
+    case AV_VIDEO_CODEC_VP9:
+      *dvb_fmt = DVR_VIDEO_FORMAT_VP9;
+      break;
+    default:
+      ERR("Not supported type convert, am_tsplayer_video_codec:%d\n", am_fmt);
+      result = false;
+      break;
+  }
+
+  return result;
+}
+
+//convert am audio codec fmt to dvb fmt
+bool convert_audio_codec_fmt_am2dvb(am_tsplayer_audio_codec am_fmt, DVR_AudioFormat_t* dvb_fmt) {
+  if (!dvb_fmt)
+    return false;
+
+  bool result = true;
+
+  switch (am_fmt)
+  {
+    case AV_AUDIO_CODEC_MP2:
+      *dvb_fmt = DVR_AUDIO_FORMAT_MPEG;
+      break;
+    case AV_AUDIO_CODEC_MP3:
+      *dvb_fmt = DVR_AUDIO_FORMAT_MPEG;
+      break;
+    case AV_AUDIO_CODEC_AC3:
+      *dvb_fmt = DVR_AUDIO_FORMAT_AC3;
+      break;
+    case AV_AUDIO_CODEC_EAC3:
+      *dvb_fmt = DVR_AUDIO_FORMAT_EAC3;
+      break;
+    case AV_AUDIO_CODEC_DTS:
+      *dvb_fmt = DVR_AUDIO_FORMAT_DTS;
+      break;
+    case AV_AUDIO_CODEC_AAC:
+      *dvb_fmt = DVR_AUDIO_FORMAT_AAC;
+      break;
+    case AV_AUDIO_CODEC_LATM:
+      *dvb_fmt = DVR_AUDIO_FORMAT_LATM;
+      break;
+    case AV_AUDIO_CODEC_PCM:
+      *dvb_fmt = DVR_AUDIO_FORMAT_PCM;
+      break;
+    case AV_AUDIO_CODEC_AC4:
+      *dvb_fmt = DVR_AUDIO_FORMAT_AC4;
+      break;
+    default:
+      ERR("Not supported type convert, am_tsplayer_audio_codec:%d\n", am_fmt);
+      result = false;
+      break;
+  }
+
+  return result;
+}
+
 static int fend_lock(int dev_no, int freqM)
 {
     int ret;
@@ -884,8 +962,19 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
     pids_info->nb_pids = 2;
     pids_info->pids[0].pid = prog->i_video_pid;
     pids_info->pids[1].pid = prog->i_audio_pid;
-    pids_info->pids[0].type = DVR_STREAM_TYPE_VIDEO << 24 | prog->i_vformat;
-    pids_info->pids[1].type = DVR_STREAM_TYPE_AUDIO << 24 | prog->i_aformat;
+
+    DVR_VideoFormat_t dvb_vfmt;
+    if (!convert_video_codec_fmt_am2dvb(prog->i_vformat, &dvb_vfmt)) {
+        ERR("can not convert am video codec type(%d) to dtv", prog->i_vformat);
+    }
+    pids_info->pids[0].type = DVR_STREAM_TYPE_VIDEO << 24 | dvb_vfmt;
+
+    DVR_AudioFormat_t dvb_afmt;
+    if (!convert_audio_codec_fmt_am2dvb(prog->i_aformat, &dvb_afmt)) {
+        ERR("can not convert am audio codec type(%d) to dtv", prog->i_vformat);
+    }
+    pids_info->pids[1].type = DVR_STREAM_TYPE_AUDIO << 24 | dvb_afmt;
+
     error = dvr_wrapper_start_record(recorder_session, &rec_start_params);
     if (error)
     {
@@ -1404,33 +1493,6 @@ static int start_playback(void *params, int scrambled, int pause)
         }
     }
 
-    switch (vfmt) {
-        case AV_VIDEO_CODEC_MPEG1:
-            vfmt = DVR_VIDEO_FORMAT_MPEG1;
-            break;
-        case AV_VIDEO_CODEC_MPEG2:
-            vfmt = DVR_VIDEO_FORMAT_MPEG2;
-            break;
-        case AV_VIDEO_CODEC_H264:
-            vfmt = DVR_VIDEO_FORMAT_H264;
-            break;
-        case AV_VIDEO_CODEC_H265:
-            vfmt = DVR_VIDEO_FORMAT_HEVC;
-            break;
-        default:
-            break;
-    };
-
-    switch (afmt) {
-            case AV_AUDIO_CODEC_MP3:
-                afmt = DVR_AUDIO_FORMAT_MPEG;
-                break;
-            case AV_AUDIO_CODEC_AAC:
-                afmt = DVR_AUDIO_FORMAT_AAC;
-                break;
-            default:
-                break;
-    };
     play_pids.video.pid = vpid;
     play_pids.video.format = vfmt;
     play_pids.audio.pid = apid;
