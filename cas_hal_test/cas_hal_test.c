@@ -967,7 +967,7 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
 
     DVR_AudioFormat_t dvb_afmt;
     if (!convert_audio_codec_fmt_am2dvb(prog->i_aformat, &dvb_afmt)) {
-        ERR("can not convert am audio codec type(%d) to dtv", prog->i_vformat);
+        ERR("can not convert am audio codec type(%d) to dtv", prog->i_aformat);
     }
     pids_info->pids[1].type = DVR_STREAM_TYPE_AUDIO << 24 | dvb_afmt;
 
@@ -1448,9 +1448,19 @@ static int start_playback(void *params, int scrambled, int pause)
         play_params.dmx_dev_id = DMX_DEV_NO_2ND;
 
         vpid = prog->i_video_pid;
-        vfmt = prog->i_vformat;
+        DVR_VideoFormat_t dvb_vfmt;
+        if (!convert_video_codec_fmt_am2dvb(prog->i_vformat, &dvb_vfmt)) {
+            ERR("can not convert am video codec type(%d) to dtv", prog->i_vformat);
+        }
+        vfmt = dvb_vfmt;
+
         apid = prog->i_audio_pid;
-        afmt = prog->i_aformat;
+        DVR_AudioFormat_t dvb_afmt;
+        if (!convert_audio_codec_fmt_am2dvb(prog->i_aformat, &dvb_afmt)) {
+            ERR("can not convert am audio codec type(%d) to dtv", prog->i_aformat);
+        }
+        afmt = dvb_afmt;
+
         service_type = SERVICE_PVR_TIMESHIFT_PLAY;
     } else {
         strncpy(play_params.location, params, sizeof(play_params.location));
