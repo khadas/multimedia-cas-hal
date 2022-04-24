@@ -887,30 +887,6 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
                            g_oc_config.emicci);
         }
 
-        if (false == tse_mode) {
-            secmem_session = AM_CA_CreateSecmem(
-                recorder[dev_no].cas_session,
-                service_type,
-                &buf,
-                &secmem_size);
-            if (!secmem_session) {
-                ERR("create dvr recording secmem failed\n");
-                dvr_wrapper_close_record(recorder_session);
-                return -1;
-            }
-            recorder[dev_no].secmem_session = secmem_session;
-
-            INF("set dvr recording secmem addr:%#x size:%#x\n", (uint32_t)buf, secmem_size);
-            error = dvr_wrapper_set_record_secure_buffer(recorder_session, buf, secmem_size);
-            if (error) {
-                ERR("dvr_wrapper_set_record_secure_buffer failed\n");
-                dvr_wrapper_close_record(recorder_session);
-                AM_CA_DestroySecmem(recorder[dev_no].cas_session, secmem_session);
-                recorder[dev_no].secmem_session = (SecMemHandle)NULL;
-                return -1;
-            }
-        }
-
         INF("set AM_CA_SetEmmPid: %#x\n", prog->i_ca_pid);
 
         error = AM_CA_SetEmmPid(g_cas_handle, dev_no, prog->i_ca_pid);
@@ -947,14 +923,34 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
         error = AM_CA_DVRStart(recorder[dev_no].cas_session, &cas_para);
         if (error) {
             ERR("CAS start DVR failed. ret = %d\r\n", error);
-            if (false == tse_mode) {
-                AM_CA_DestroySecmem(recorder[dev_no].cas_session, recorder[dev_no].secmem_session);
-                recorder[dev_no].secmem_session = (SecMemHandle)NULL;
-            }
             AM_CA_CloseSession(recorder[dev_no].cas_session);
             recorder[dev_no].cas_session = 0;
             dvr_wrapper_close_record(recorder_session);
             return -1;
+        }
+
+        if (false == tse_mode) {
+            secmem_session = AM_CA_CreateSecmem(
+                recorder[dev_no].cas_session,
+                service_type,
+                &buf,
+                &secmem_size);
+            if (!secmem_session) {
+                ERR("create dvr recording secmem failed\n");
+                dvr_wrapper_close_record(recorder_session);
+                return -1;
+            }
+            recorder[dev_no].secmem_session = secmem_session;
+
+            INF("set dvr recording secmem addr:%#x size:%#x\n", (uint32_t)buf, secmem_size);
+            error = dvr_wrapper_set_record_secure_buffer(recorder_session, buf, secmem_size);
+            if (error) {
+                ERR("dvr_wrapper_set_record_secure_buffer failed\n");
+                dvr_wrapper_close_record(recorder_session);
+                AM_CA_DestroySecmem(recorder[dev_no].cas_session, secmem_session);
+                recorder[dev_no].secmem_session = (SecMemHandle)NULL;
+                return -1;
+            }
         }
     }
 
