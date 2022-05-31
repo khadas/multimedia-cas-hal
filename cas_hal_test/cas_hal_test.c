@@ -1871,7 +1871,7 @@ int main(int argc, char *argv[])
                 }
             }
 
-            dvb_set_demux_source(input_dev_no, dmx_src);
+            dvb_set_demux_source(DMX_DEV_NO, dmx_src);
 
             fend_lock(fend_dev_no, freqM);
         } else {
