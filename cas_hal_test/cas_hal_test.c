@@ -2099,7 +2099,7 @@ int main(int argc, char *argv[])
                     mode = TIMESHIFTING;
                     strcpy(tspath, pfilename);
 
-                    dvb_set_demux_source(DMX_DEV_NO, DVB_DEMUX_SOURCE_TS0);
+                    dvb_set_demux_source(DMX_DEV_NO, DVB_DEMUX_SOURCE_TS0 + input_dev_no);
                     ret = start_recording(DVR_DEV_NO, prog, tspath);
 
                     if (!ret) {
