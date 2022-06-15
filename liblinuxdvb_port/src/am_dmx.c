@@ -18,7 +18,7 @@
 #include "am_cas.h"
 #include "am_dmx.h"
 
-#define DMX_COUNT (3)
+#define DMX_COUNT (4)
 #define DMX_FILTER_COUNT (32*DMX_COUNT)
 #define SEC_BUF_SIZE (4096)
 #define DMX_POLL_TIMEOUT (200)
@@ -150,7 +150,7 @@ static void* dmx_data_thread(void *arg)
 
 static dvb_dmx_filter_t* get_filter(int dev_no, int fhandle)
 {
-    if (dev_no >= DMX_COUNT)
+    if (dev_no > DMX_COUNT)
     {
         CA_DEBUG(1, "wrong dmx device no %d", dev_no);
         return NULL;
