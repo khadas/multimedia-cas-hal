@@ -725,11 +725,7 @@ static int start_liveplay(dvb_service_info_t *prog)
         prog->i_ecm_pid[0], prog->i_ca_pid, prog->scrambled);
 
     memset(&param, 0 , sizeof(am_tsplayer_init_params));
-    if (prog->service_type == DVB_TYPE) {
-        param.source = TS_DEMOD;
-    } else {
-        param.source = TS_MEMORY;
-    }
+    param.source = TS_DEMOD;
     param.dmx_dev_id = DMX_DEV_NO;
     if (prog->scrambled) {
         param.drmmode = TS_INPUT_BUFFER_TYPE_TVP;
@@ -1858,19 +1854,10 @@ int main(int argc, char *argv[])
     if (is_live(mode) || is_live_local(mode)) {
         if (is_live(mode)) {
             DVB_DemuxSource_t dmx_src;
-            if (isIPTV) {
-                dmx_src = DVB_DEMUX_SOURCE_DMA0 + input_dev_no;
-                if (dmx_src > DVB_DEMUX_SOURCE_DMA7) {
-                    dmx_src = DVB_DEMUX_SOURCE_DMA1;
-                }
-                amsysfs_set_sysfs_str(TSN_PATH, TSN_IPTV);
-            } else {
-                dmx_src = DVB_DEMUX_SOURCE_TS0_1 + input_dev_no;
-                if (dmx_src > DVB_DEMUX_SOURCE_TS7_1) {
-                    dmx_src = DVB_DEMUX_SOURCE_TS0_1;
-                }
+            dmx_src = DVB_DEMUX_SOURCE_TS0_1 + input_dev_no;
+            if (dmx_src > DVB_DEMUX_SOURCE_TS7_1) {
+                dmx_src = DVB_DEMUX_SOURCE_TS0_1;
             }
-
             dvb_set_demux_source(DMX_DEV_NO, dmx_src);
 
             fend_lock(fend_dev_no, freqM);
