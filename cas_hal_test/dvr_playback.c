@@ -98,16 +98,21 @@ static void *inject_thread(void *arg)
     while (gInjectRunning) {
         int retry = 100;
 	int kRwSize = 0;
+	int unaligned_len = 0;
         am_tsplayer_result res;
 
 	if (curr_reg_idx < reg_cnt - 1) {
 		if (crypto_para.offset + blksize >= store_reg[curr_reg_idx +1].start) {
-			blksize = store_reg[curr_reg_idx + 1].start - crypto_para.offset;
+			unaligned_len = store_reg[curr_reg_idx + 1].start - crypto_para.offset;
 			curr_reg_idx ++;
 		}
 	}
 
-	kRwSize = read(fd, buf, blksize);
+	if (unaligned_len > 0) {
+	    kRwSize = read(fd, buf, unaligned_len);
+	} else {
+	    kRwSize = read(fd, buf, blksize);
+	}
 	if (kRwSize <= 0) {
 	    INF("%s read end of file\n", __func__);
 	    while (gInjectRunning) {
@@ -136,7 +141,8 @@ static void *inject_thread(void *arg)
 	    }
         } while(res || retry-- > 0);
 
-	crypto_para.offset += kRwSize;
+        unaligned_len = 0;
+        crypto_para.offset += kRwSize;
     }
 
     free(buf);
