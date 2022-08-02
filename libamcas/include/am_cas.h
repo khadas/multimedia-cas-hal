@@ -14,8 +14,8 @@
  * Cas Hal is upper layer of libcas_*.
  * It is on top of specific cas integration.
  * It supports:
- * \li Load specific cas intergration automatically.
- * \li Run sepecific cas function.
+ * \li Load specific cas integration automatically.
+ * \li Run specific cas function.
  */
 #ifndef _AM_CAS_H_
 #define _AM_CAS_H_
@@ -39,7 +39,7 @@ extern "C" {
 
 #define UNUSED(x) (x=x)
 #define CAS_ASSERT(expression)    if (!expression) { \
-                                        CA_DEBUG(2, "%s, Null poiter. Line %d\n", __func__, __LINE__); \
+                                        CA_DEBUG(2, "%s, Null pointer. Line %d\n", __func__, __LINE__); \
                                         return AM_ERROR_GENERAL_ERORR; \
                                   }
 #define CAS_FUNC(func)            if (func == NULL) { \
@@ -100,12 +100,12 @@ typedef struct {
     uint16_t service_id;  /**< The service's index.*/
     uint8_t fend_dev;     /**< The frontend device's index*/
     uint8_t dmx_dev;      /**< The demux device's index.*/
-    uint8_t dsc_dev;      /**< The descrmabler device's index.*/
+    uint8_t dsc_dev;      /**< The descrambler device's index.*/
     uint8_t dvr_dev;      /**< The DVR device's index.*/
     CA_SERVICE_MODE_t service_mode; /**< Service mode.*/
     CA_SERVICE_TYPE_t service_type; /**< Service type.*/
     uint16_t ecm_pid;     /**< ECM's PID.*/
-    uint16_t stream_pids[MAX_CHAN_COUNT];  /**< Elementry streams' index.*/
+    uint16_t stream_pids[MAX_CHAN_COUNT];  /**< Elementary streams' index.*/
     uint32_t stream_num;  /**< Elementary streams' number.*/
     uint8_t ca_private_data[MAX_DATA_LEN]; /**< Private data.*/
     uint8_t ca_private_data_len;           /**< Private data's length.*/
@@ -136,7 +136,7 @@ typedef struct AM_CA_SecAttr_s {
     AM_CA_SECTION section_type;
 }AM_CA_SecAttr_t;
 
-/**\brief CAS Storeinfo region*/
+/**\brief CAS Store info region*/
 typedef struct AM_CA_Store_Region_s {
     loff_t start;
     loff_t end;

@@ -404,7 +404,7 @@ static AM_RESULT cas_event_cb(CasSession session, char *json)
     }
     cas = cJSON_GetObjectItemCaseSensitive(input, ITEM_CAS);
     if (!cJSON_IsString(cas) || (strcmp(cas->valuestring, VMX_CAS_STRING))) {
-        INF("%s, not Vermatrix cas cmd\n", __func__);
+        INF("%s, not Verimatrix cas cmd\n", __func__);
         goto end;
     }
     type = cJSON_GetObjectItemCaseSensitive(input, ITEM_TYPE);
@@ -423,10 +423,10 @@ static AM_RESULT cas_event_cb(CasSession session, char *json)
         }
         if (state) {
             check_pin_status = PIN_CHECK_SUCCESS;
-            INF("notify pin check status -> PIN_NEED_SUCCESS\n");
+            INF("notify pin check status -> PIN_CHECK_SUCCESS\n");
         } else {
             check_pin_status = PIN_CHECK_FAILED;
-            INF("notify pin check status -> PIND_NEED_FAILED");
+            INF("notify pin check status -> PIN_CHECK_FAILED");
         }
     }
     return 0;
@@ -729,12 +729,12 @@ static int start_liveplay(dvb_service_info_t *prog)
     param.dmx_dev_id = DMX_DEV_NO;
     if (prog->scrambled) {
         param.drmmode = TS_INPUT_BUFFER_TYPE_TVP;
-        INF("enalbe live TVP\n");
+        INF("enable live TVP\n");
     }
 
     ret = AmTsPlayer_create(param, &player_session);
     if (ret != AM_TSPLAYER_OK) {
-        CA_DEBUG(0, "Create tslayer failed!!!! err:%x", ret);
+        CA_DEBUG(0, "Create tsplayer failed!!!! err:%x", ret);
         return -1;
     }
     play.player_session = player_session;
@@ -806,8 +806,6 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
 
     UNUSED(dev_no);
     DVR_WrapperRecord_t recorder_session;
-    //sprintf(cmd, "echo ts%d > /sys/class/stb/demux%d_source", tssrc, DMX_DEV_DVR);
-    //system(cmd);
 
     if (dev_no >= MAX_REC_NUM) {
         ERR("wrong device no %d\n", dev_no);
@@ -1540,7 +1538,7 @@ static int start_playback(void *params, int scrambled, int pause)
        result = AmTsPlayer_setSurface(tsplayer_handle, (void *)&video_tunnel_id);
        INF( "set surface %s, result(%d)\n", (result)? "FAIL" : "OK", result);
        result = AmTsPlayer_getVersion(&versionM, &versionL);
-       INF( "TsPlayer verison(%d.%d) %s, result(%d)\n",
+       INF( "TsPlayer version(%d.%d) %s, result(%d)\n",
           versionM, versionL,
           (result)? "FAIL" : "OK",
           result);
@@ -1683,7 +1681,7 @@ static void usage(int argc, char *argv[])
 
 static int cas_test_term(void)
 {
-    INF("\n\ncas_test_term, mode=0x%x,has_live=%d, has_recording=%d,has_playback=%d\n",
+    INF("\n\n cas_test_term, mode=0x%x,has_live=%d, has_recording=%d,has_playback=%d\n",
         mode, has_live(mode), has_recording(mode), has_playback(mode));
     if (has_live(mode)) {
         stop_liveplay();

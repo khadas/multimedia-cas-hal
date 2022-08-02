@@ -282,7 +282,7 @@ int ext_dvr_playback(const char *path, CasHandle cas_handle)
        result = AmTsPlayer_setSurface(tsplayer_handle, (void *)&video_tunnel_id);
        INF( "TsPlayer set surface %s, result(%d)\n", (result)? "FAIL" : "OK", result);
        result = AmTsPlayer_getVersion(&versionM, &versionL);
-       INF( "TsPlayer verison(%d.%d) %s, result(%d)\n",
+       INF( "TsPlayer version(%d.%d) %s, result(%d)\n",
           versionM, versionL,
           (result)? "FAIL" : "OK",
           result);

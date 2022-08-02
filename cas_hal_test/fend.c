@@ -192,7 +192,7 @@ int dmd_lock_s(int fe_fd, const dmd_delivery_t * pDelivery, dmd_lnb_tone_state_t
    struct dtv_properties props;
    struct dtv_property p[DTV_IOCTL_MAX_MSGS];
 
-   /*printf("lock S, freq:%d, symbol rate:%d, band start:%d Khz, end:%d Khz, LO:%d Khz, dowlink:%d\n",
+   /*printf("lock S, freq:%d, symbol rate:%d, band start:%d Khz, end:%d Khz, LO:%d Khz, downlink:%d\n",
 	   pDelivery->delivery.satellite.frequency, pDelivery->delivery.satellite.symbol_rate,
 	   pDelivery->delivery.satellite.band.band_start, pDelivery->delivery.satellite.band.band_end,
 	   pDelivery->delivery.satellite.band.lo, pDelivery->delivery.satellite.band.downlink);*/

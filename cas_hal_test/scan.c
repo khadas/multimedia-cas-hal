@@ -65,7 +65,7 @@ static int parse_pat_section( const uint8_t *data, int sec_len, void *user_data 
     dvb_service_info_t  *p_dvb_info = (dvb_service_info_t *)user_data;
 
     if (pat_done_flag) {
-        CA_DEBUG( 1, "%s, pat recive is done ,return", __FUNCTION__ );
+        CA_DEBUG( 1, "%s, pat receive is done ,return", __FUNCTION__ );
         return 0;
     }
 
@@ -177,7 +177,7 @@ static int parse_pmt_section( const uint8_t *data, void *user_data )
         pid = ( ( p[1] << 8 | p[2] ) & 0x1FFF );
         es_info_len = ( ( p[3] << 8 | p[4] ) & 0x0FFF );
         sec_len -= ( 5 + es_info_len );
-        CA_DEBUG( 1, "es_info, strem_type:%d, pid:%#x, es_info_len:%d, sec_len:%d\n",
+        CA_DEBUG( 1, "es_info, stream_type:%d, pid:%#x, es_info_len:%d, sec_len:%d\n",
                   stream_type, pid, es_info_len, sec_len );
 if (p_dvb_info[index].i_video_pid == 0 ||
 	 p_dvb_info[index].i_audio_pid == 0) {
@@ -451,7 +451,7 @@ int aml_scan(void)
         usleep(100 * 1000);
     }
 
-    CA_DEBUG(1,"@@ %s, pat is recive done. pmt_num: %d \n", __FUNCTION__, g_pmt_num);
+    CA_DEBUG(1,"@@ %s, pat is receive done. pmt_num: %d \n", __FUNCTION__, g_pmt_num);
     am_dmx_stop_filter(DMX_DEV_NO, filter_handle);
     am_dmx_free_filter(DMX_DEV_NO, filter_handle);
 
@@ -475,7 +475,7 @@ int aml_scan(void)
         usleep(10*1000);
     }
 
-    CA_DEBUG(1,"@@ %s, pmt is recive done.\n", __FUNCTION__);
+    CA_DEBUG(1,"@@ %s, pmt is receive done.\n", __FUNCTION__);
 
     for(i = 0; i < g_pmt_num; i++) {
         am_dmx_stop_filter(DMX_DEV_NO, pmt_filter_handles[i]);
@@ -502,7 +502,7 @@ int aml_scan(void)
 		}
     }
 
-    CA_DEBUG(1,"@@ %s, cat is recive done.\n", __FUNCTION__);
+    CA_DEBUG(1,"@@ %s, cat is receive done.\n", __FUNCTION__);
 
     am_dmx_stop_filter(DMX_DEV_NO, filter_handle);
     am_dmx_free_filter(DMX_DEV_NO, filter_handle);

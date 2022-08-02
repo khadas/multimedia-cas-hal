@@ -62,7 +62,7 @@ int key_open (void)
 int key_close(int fd)
 {
     if (fd == -1) {
-        printf("key_close inavlid fd\n");
+        printf("key_close invalid fd\n");
         return 0;
     }
     close(fd);
@@ -72,7 +72,7 @@ int key_close(int fd)
 
 /*
  * key_malloc contains slot alloc and slot config
- * the API also can be splicted to 2 APIs key_alloc/key_config
+ * the API also can be split to 2 APIs key_alloc/key_config
  */
 int key_malloc(int fd, int key_userid, int key_algo, int is_iv)
 {
@@ -118,7 +118,7 @@ int key_free(int fd, int key_index)
 
     ret = ioctl(fd, KEY_FREE, key_index);
     if (ret == 0) {
-        printf("key_free key_index:%d succees\n", key_index);
+        printf("key_free key_index:%d success\n", key_index);
         return 0;
     } else {
         printf("key_free key_index:%d fail\n", key_index);
