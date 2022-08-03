@@ -93,7 +93,7 @@ int loadCASLibrary(void)
     return -1;
 }
 
-/**\brief Wether the specified system id is supported
+/**\brief Whether the specified system id is supported
  * \param CA_system_id
  * \param[in] CA_system_id The system id of the CA system
  * \retval AM_TRUE or AM_FALSE
@@ -482,7 +482,7 @@ AM_RESULT AM_CA_Ioctl(CasSession session, const char *in_json, char *out_json, u
     return cas_ops->ioctl(session, in_json, out_json, out_len);
 }
 
-/**\brief Wether the specified cas system need whole section data
+/**\brief Whether the specified cas system need whole section data
  * \retval AM_TRUE or AM_FALSE
  * \return Error code
  */

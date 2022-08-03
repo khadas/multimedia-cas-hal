@@ -347,7 +347,7 @@ int close_fend(int fe_id)
 dmd_tuner_event_t get_dmd_lock_status(int frontend_fd)
 {
     struct dvb_frontend_event fe_event;
-    dmd_tuner_event_t tune_event = TUNER_STATE_UNKNOW;
+    dmd_tuner_event_t tune_event = TUNER_STATE_UNKNOWN;
     if (ioctl(frontend_fd, FE_READ_STATUS, &fe_event.status) >= 0)
     {
        printf("current tuner status=0x%02x \n", fe_event.status);

@@ -161,7 +161,7 @@ typedef size_t CasSession;
 /**CAS event callback.*/
 typedef AM_RESULT (*CAS_EventFunction_t)(CasSession session, char *json);
 
-/**\brief Wether the specified system id is supported
+/**\brief Whether the specified system id is supported
  * \param[in] CA_system_id The system id of the CA system
  * \retval AM_TRUE or AM_FALSE
  * \return Error code
@@ -316,7 +316,7 @@ AM_RESULT AM_CA_RegisterEventCallback(CasSession session, CAS_EventFunction_t ev
  */
 AM_RESULT AM_CA_Ioctl(CasSession session, const char *in_json, char *out_json, uint32_t out_len);
 
-/**\brief Wether the specified cas system need whole section data
+/**\brief Whether the specified cas system need whole section data
  * \retval AM_TRUE or AM_FALSE
  * \return Error code
  */
