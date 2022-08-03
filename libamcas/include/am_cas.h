@@ -40,7 +40,7 @@ extern "C" {
 #define UNUSED(x) (x=x)
 #define CAS_ASSERT(expression)    if (!expression) { \
                                         CA_DEBUG(2, "%s, Null pointer. Line %d\n", __func__, __LINE__); \
-                                        return AM_ERROR_GENERAL_ERORR; \
+                                        return AM_ERROR_GENERAL_ERROR; \
                                   }
 #define CAS_FUNC(func)            if (func == NULL) { \
                                         CA_DEBUG(2, "%s, unsupport function. Line %d\n", __func__, __LINE__); \
@@ -148,7 +148,7 @@ typedef enum {
     AM_ERROR_NOT_LOAD,       /**< Dynamic library is not loaded.*/
     AM_ERROR_NOT_SUPPORTED,  /**< The CAS is not supported.*/
     AM_ERROR_OVERFLOW,       /**< Data overflow.*/
-    AM_ERROR_GENERAL_ERORR   /**< General error.*/
+    AM_ERROR_GENERAL_ERROR   /**< General error.*/
 }AM_RESULT;
 
 /**Secure memory handle.*/

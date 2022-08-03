@@ -198,7 +198,7 @@ AM_RESULT AM_CA_OpenSession(CasHandle handle, CasSession* session, CA_SERVICE_TY
  */
 AM_RESULT AM_CA_CloseSession(CasSession session)
 {
-    AM_RESULT ret =AM_ERROR_GENERAL_ERORR;
+    AM_RESULT ret =AM_ERROR_GENERAL_ERROR;
     CAS_ASSERT(session);
     CAS_ASSERT(cas_ops);
 
@@ -275,7 +275,7 @@ AM_RESULT AM_CA_UpdateDescramblingPid(CasSession session, uint16_t oldStreamPid,
         return cas_ops->update_descrambling_pid(session, oldStreamPid, newStreamPid);
     }
 
-    return AM_ERROR_GENERAL_ERORR;
+    return AM_ERROR_GENERAL_ERROR;
 }
 
 /**\brief Set EMM Pid for the specified CA system
