@@ -158,6 +158,7 @@ static CasTestSession recorder[MAX_REC_NUM];
 static pthread_t gInjectThread;
 static int running = 1;
 static int gInjectRunning = 0;
+static int g_frontend_id = -1;
 
 static int watermark_test_config(
     uint8_t on,
@@ -259,13 +260,14 @@ bool convert_audio_codec_fmt_am2dvb(am_tsplayer_audio_codec am_fmt, DVR_AudioFor
 static int fend_lock(int dev_no, int freqM)
 {
     int ret;
-    int fend_id;
+    int fend_id = -1;
     int wait_time = 3;
     dmd_delivery_t delivery;
     dmd_tuner_event_t status;
 
     if (open_fend(dev_no, &fend_id)) {
         ERR("fend open failed\n");
+        return -1;
     }
 
     memset(&delivery, 0, sizeof(delivery));
@@ -283,8 +285,11 @@ static int fend_lock(int dev_no, int freqM)
 
     if (ret) {
         ERR("lock failed, ret:%d\n", ret);
+        close_fend(fend_id);
         return -1;
     }
+
+    g_frontend_id = fend_id;
 
     while (wait_time--) {
         sleep(1);
@@ -299,7 +304,7 @@ static int fend_lock(int dev_no, int freqM)
 int init_tsplayer_inject(dvb_service_info_t *prog)
 {
     int ret;
-    am_tsplayer_handle session;
+    am_tsplayer_handle session = 0;
     am_tsplayer_input_source_type tsType = TS_MEMORY;
     am_tsplayer_input_buffer_type drmmode = TS_INPUT_BUFFER_TYPE_NORMAL;
 
@@ -339,8 +344,12 @@ int init_tsplayer_inject(dvb_service_info_t *prog)
 
 static void *inject_thread(void *arg)
 {
-    int fd = -1;
-    uint8_t buf[INJECT_LENGTH];
+    int fd;
+    uint8_t* buf = (uint8_t*)malloc(INJECT_LENGTH * sizeof(uint8_t));
+    if (buf == NULL) {
+        ERR("%s malloc FAILED\n", __func__);
+        return NULL;
+    }
     char *tspath = (char *)arg;
     const int kRwTimeout = 30000;
     am_tsplayer_input_buffer ibuf = {TS_INPUT_BUFFER_TYPE_NORMAL, (char *)buf, 0};
@@ -348,6 +357,7 @@ static void *inject_thread(void *arg)
     fd = open(tspath, O_RDONLY);
     INF("%s open %s, fd:%d\n", __func__, tspath, fd);
     if (fd == -1) {
+        free(buf);
         return NULL;
     }
     while (gInjectRunning) {
@@ -371,8 +381,9 @@ static void *inject_thread(void *arg)
                 //INF("%#x Bytes injected\n", ibuf.buf_size);
                 break;
             }
-        } while(res || retry-- > 0);
+        } while(retry-- > 0);
     }
+    free(buf);
     close(fd);
     INF("exit %s\n", __func__);
     return NULL;
@@ -531,6 +542,8 @@ static void video_callback(void *user_data, am_tsplayer_event *event)
 {
     UNUSED(user_data);
     INF("video evt callback, type:%d\r\n", event?event->type:0);
+    if (event == NULL)
+        return;
     switch (event->type) {
         case AM_TSPLAYER_EVENT_TYPE_VIDEO_CHANGED:
             INF("[evt] video changed\r\n");
@@ -710,14 +723,14 @@ static int start_descrambling(dvb_service_info_t *prog)
 
 static int start_liveplay(dvb_service_info_t *prog)
 {
-    uint32_t num;
+    uint32_t num = 0;
     am_tsplayer_result ret;
     am_tsplayer_video_params vparam;
     am_tsplayer_audio_params aparam;
     am_tsplayer_init_params param;
     am_tsplayer_avsync_mode avsyncmode = TS_SYNC_VMASTER;
 
-    am_tsplayer_handle player_session;
+    am_tsplayer_handle player_session = 0;
 
     INF("vpid:%#x vfmt:%d apid:%#x afmt:%d ecmpid:%#x emmpid:%#x scramble:%d\r\n",
         prog->i_video_pid, prog->i_vformat,
@@ -805,7 +818,7 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
     CA_SERVICE_TYPE_t service_type = SERVICE_PVR_RECORDING;
 
     UNUSED(dev_no);
-    DVR_WrapperRecord_t recorder_session;
+    DVR_WrapperRecord_t recorder_session = NULL;
 
     if (dev_no >= MAX_REC_NUM) {
         ERR("wrong device no %d\n", dev_no);
@@ -826,6 +839,7 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
     }
 
     strncpy(rec_open_params.location, tspath, sizeof(rec_open_params.location));
+    rec_open_params.location[sizeof(rec_open_params.location)-1] = '\0';
 
     rec_open_params.is_timeshift = (is_timeshifting(mode)) ? DVR_TRUE : DVR_FALSE;
 
@@ -988,7 +1002,9 @@ static bool get_cas_mode(CasSession session)
     cJSON *input = NULL;
     cJSON *item = NULL;
     char in_json[MAX_JSON_LEN];
+    in_json[0] = '\0';
     char out_json[MAX_JSON_LEN];
+    out_json[0] = '\0';
 
     input = cJSON_CreateObject();
     item = cJSON_CreateString(ITEM_GET_CAS_MODE);
@@ -1020,7 +1036,9 @@ static int show_cardno(void)
     cJSON *input = NULL;
     cJSON *item = NULL;
     char in_json[MAX_JSON_LEN];
+    in_json[0] = '\0';
     char out_json[MAX_JSON_LEN];
+    out_json[0] = '\0';
 
     input = cJSON_CreateObject();
     item = cJSON_CreateString(VMX_CAS_STRING);
@@ -1051,7 +1069,9 @@ static int show_boxid(void)
     cJSON *input = NULL;
     cJSON *item = NULL;
     char in_json[MAX_JSON_LEN];
+    in_json[0] = '\0';
     char out_json[MAX_JSON_LEN];
+    out_json[0] = '\0';
 
     input = cJSON_CreateObject();
     item = cJSON_CreateString(VMX_CAS_STRING);
@@ -1081,8 +1101,11 @@ static int check_pin(char *pin, uint8_t pinIndex, uint8_t reason, uint8_t dvrCha
     cJSON *input = NULL;
     cJSON *item = NULL;
     char in_json[MAX_JSON_LEN];
+    in_json[0] = '\0';
     char out_json[MAX_JSON_LEN];
+    out_json[0] = '\0';
     CasSession cas_session;
+    memset(&cas_session, 0, sizeof(CasSession));
 
     input = cJSON_CreateObject();
     item = cJSON_CreateString(VMX_CAS_STRING);
@@ -1118,7 +1141,9 @@ static int dvr_test_config(uint8_t algo)
     cJSON *input = NULL;
     cJSON *item = NULL;
     char in_json[MAX_JSON_LEN];
+    in_json[0] = '\0';
     char out_json[MAX_JSON_LEN];
+    out_json[0] = '\0';
 
     input = cJSON_CreateObject();
     item = cJSON_CreateString(VMX_CAS_STRING);
@@ -1143,7 +1168,9 @@ static int watermark_test_config(
     cJSON *input = NULL;
     cJSON *item = NULL;
     char in_json[MAX_JSON_LEN];
+    in_json[0] = '\0';
     char out_json[MAX_JSON_LEN];
+    out_json[0] = '\0';
 
     input = cJSON_CreateObject();
     item = cJSON_CreateString(VMX_CAS_STRING);
@@ -1181,7 +1208,9 @@ static int output_control_test_config(
     cJSON *input = NULL;
     cJSON *item = NULL;
     char in_json[MAX_JSON_LEN];
+    in_json[0] = '\0';
     char out_json[MAX_JSON_LEN];
+    out_json[0] = '\0';
 
     input = cJSON_CreateObject();
     item = cJSON_CreateString(VMX_CAS_STRING);
@@ -1217,7 +1246,9 @@ static int svp_test_config(size_t addr)
     cJSON *input = NULL;
     cJSON *item = NULL;
     char in_json[MAX_JSON_LEN];
+    in_json[0] = '\0';
     char out_json[MAX_JSON_LEN];
+    out_json[0] = '\0';
 
     input = cJSON_CreateObject();
     item = cJSON_CreateString(VMX_CAS_STRING);
@@ -1242,7 +1273,9 @@ static int antirollback_test_config(uint8_t flag)
     cJSON *input = NULL;
     cJSON *item = NULL;
     char in_json[MAX_JSON_LEN];
+    in_json[0] = '\0';
     char out_json[MAX_JSON_LEN];
+    out_json[0] = '\0';
 
     input = cJSON_CreateObject();
     item = cJSON_CreateString(VMX_CAS_STRING);
@@ -1270,7 +1303,9 @@ static int ta2ta_test_config(
     cJSON *input = NULL;
     cJSON *item = NULL;
     char in_json[MAX_JSON_LEN];
+    in_json[0] = '\0';
     char out_json[MAX_JSON_LEN];
+    out_json[0] = '\0';
 
     input = cJSON_CreateObject();
     item = cJSON_CreateString(VMX_CAS_STRING);
@@ -1299,7 +1334,9 @@ static int hdcp_test_config(uint8_t svc_idx)
     cJSON *input = NULL;
     cJSON *item = NULL;
     char in_json[MAX_JSON_LEN];
+    in_json[0] = '\0';
     char out_json[MAX_JSON_LEN];
+    out_json[0] = '\0';
 
     input = cJSON_CreateObject();
     item = cJSON_CreateString(VMX_CAS_STRING);
@@ -1356,12 +1393,13 @@ static int stop_recording(int dev_no)
 
 static int get_dvr_info(char *location, int *apid, int *afmt, int *vpid, int *vfmt)
 {
-    uint32_t segment_nb;
-    uint64_t *p_segment_ids;
+    uint32_t segment_nb = 0;
+    uint64_t *p_segment_ids = NULL;
     DVR_RecordSegmentInfo_t seg_info;
     int error;
     int aid = 0x1fff, vid = 0x1fff;
     int aft = 0, vft = 0;
+    memset(&seg_info, 0, sizeof(DVR_RecordSegmentInfo_t));
 
     error = dvr_segment_get_list(location, &segment_nb, &p_segment_ids);
     if (!error && segment_nb) {
@@ -1416,15 +1454,15 @@ static int get_dvr_info(char *location, int *apid, int *afmt, int *vpid, int *vf
 
 static int start_playback(void *params, int scrambled, int pause)
 {
-    DVR_WrapperPlayback_t player;
+    DVR_WrapperPlayback_t player = NULL;
     DVR_PlaybackPids_t play_pids;
     DVR_WrapperPlaybackOpenParams_t play_params;
-    am_tsplayer_handle tsplayer_handle;
+    am_tsplayer_handle tsplayer_handle = 0;
     int vpid = 1024, apid = 1025, vfmt = 0, afmt = 0;
     bool tse_mode = false;
     int error;
 
-    void *sec_buf;
+    void *sec_buf = NULL;
     uint32_t sec_buf_size = INJECT_LENGTH + 4*1024;
     CA_SERVICE_TYPE_t service_type = SERVICE_PVR_PLAY;
     INF("start_playback,0- sec_buf_size:%d\n", sec_buf_size);
@@ -1438,6 +1476,7 @@ static int start_playback(void *params, int scrambled, int pause)
     if (is_timeshifting(mode)) {
         dvb_service_info_t *prog = (dvb_service_info_t *)params;
         strncpy(play_params.location, pfilename, sizeof(play_params.location));
+        play_params.location[sizeof(play_params.location)-1] = '\0';
         play_params.is_timeshift = DVR_TRUE;
         play_params.dmx_dev_id = DMX_DEV_NO_2ND;
 
@@ -1458,6 +1497,7 @@ static int start_playback(void *params, int scrambled, int pause)
         service_type = SERVICE_PVR_TIMESHIFT_PLAY;
     } else {
         strncpy(play_params.location, params, sizeof(play_params.location));
+        play_params.location[sizeof(play_params.location)-1] = '\0';
         play_params.is_timeshift = DVR_FALSE;
         play_params.dmx_dev_id = DMX_DEV_NO;
         get_dvr_info(params, &apid, &afmt, &vpid, &vfmt);
@@ -1470,8 +1510,8 @@ static int start_playback(void *params, int scrambled, int pause)
             g_cas_handle,
             &play.cas_session,
             service_type);
-        INF("%s open cas session:%#x, start cas\n",
-            __func__, play.cas_session);
+        INF("%s open cas session:%#x, start cas, return:%d\n",
+            __func__, play.cas_session, error);
 
         AM_CA_RegisterEventCallback(play.cas_session, cas_event_cb);
 
@@ -1503,7 +1543,7 @@ static int start_playback(void *params, int scrambled, int pause)
 
      /*open TsPlayer*/
     {
-       uint32_t versionM, versionL;
+       uint32_t versionM = 0, versionL = 0;
        am_tsplayer_init_params init_param =
        {
           .source = TS_MEMORY,
@@ -1546,6 +1586,7 @@ static int start_playback(void *params, int scrambled, int pause)
        result = AmTsPlayer_registerCb(tsplayer_handle,
           tsplayer_callback,
           "tsp0");
+       INF( " AmTsPlayer_registerCb %s, result(%d)\n", (result)? "FAIL" : "OK", result);
        if (!tse_mode && scrambled) {
            AmTsPlayer_setParams(tsplayer_handle, AM_TSPLAYER_KEY_VIDEO_SECLEVEL, &seclev);
            AmTsPlayer_setParams(tsplayer_handle, AM_TSPLAYER_KEY_AUDIO_SECLEVEL, &seclev);
@@ -1684,6 +1725,7 @@ static int cas_test_term(void)
     INF("\n\n cas_test_term, mode=0x%x,has_live=%d, has_recording=%d,has_playback=%d\n",
         mode, has_live(mode), has_recording(mode), has_playback(mode));
     if (has_live(mode)) {
+        close_fend(g_frontend_id);
         stop_liveplay();
     }
 
@@ -1743,6 +1785,7 @@ static void handle_signal(int signal)
 static void init_signal_handler()
 {
     struct sigaction act;
+    memset(&act, 0, sizeof(struct sigaction));
     act.sa_handler = handle_signal;
     sigaction(SIGINT, &act, NULL);
 }
@@ -1799,17 +1842,20 @@ int main(int argc, char *argv[])
         }
     } else if (strcmp(argv[1], "local") == 0) {
         mode = LIVE_LOCAL;
-        strcpy(&tspath[0], argv[2]);
+        strncpy(tspath, argv[2],256);
+        tspath[255] = '\0';
         sscanf(argv[3], "%d", &prog_idx);
         amsysfs_set_sysfs_str(TSN_PATH, TSN_IPTV);
     } else if (strcmp(argv[1], "dvrrecord") == 0) {
-        strcpy(&tspath[0], argv[2]);
+        strncpy(tspath, argv[2],256);
+        tspath[255] = '\0';
         mode = RECORDING;
     } else if (strcmp(argv[1], "dvrplay") == 0) {
         int ret;
         struct stat buf;
 
-        strcpy(&tspath[0], argv[2]);
+        strncpy(tspath, argv[2],256);
+        tspath[255] = '\0';
         if (argc > 3) {
             sscanf(argv[3], "%d", &scrambled);
         }
@@ -2004,6 +2050,10 @@ int main(int argc, char *argv[])
                      &prog_idx, &tspath[0], &algo, &isIPTV);
                 INF("dvrrecord dvr_dev_no:%d,%d,%s,0x%x, %d\r\n",
                     dvr_dev_no, prog_idx, tspath, algo, isIPTV);
+                if (dvr_dev_no >= MAX_REC_NUM || dvr_dev_no < 0) {
+                    INF("dvrrecord dvr_dev_no is not correct value!\r\n");
+                    continue;
+                }
 
                 if (ret >= 4) {
                     dvr_test_config(algo);
@@ -2063,6 +2113,10 @@ int main(int argc, char *argv[])
                     ERR("wrong input, cmd: dvrstop dvr_dev_no");
                     continue;
                 }
+                if (dvr_dev_no >= MAX_REC_NUM || dvr_dev_no < 0) {
+                    INF("dvrrecord dvr_dev_no is not correct value!\r\n");
+                    continue;
+                }
                 ret = stop_recording(dvr_dev_no);
                 if (!ret) {
                     rec_status &= ~(1 << dvr_dev_no);
@@ -2082,7 +2136,8 @@ int main(int argc, char *argv[])
                     stop_liveplay();
 
                     mode = TIMESHIFTING;
-                    strcpy(tspath, pfilename);
+                    strncpy(tspath, pfilename,256);
+                    tspath[255] = '\0';
 
                     dvb_set_demux_source(DMX_DEV_NO, DVB_DEMUX_SOURCE_TS0 + input_dev_no);
                     ret = start_recording(DVR_DEV_NO, prog, tspath);
@@ -2102,20 +2157,18 @@ int main(int argc, char *argv[])
 
                 } else {
                     ERR("Not in live only mode, cannot enter timeshift\n");
-                    continue;
                 }
             } else if (!strncmp(buf, "tsstop", 6)) {
                 if (is_timeshifting(mode)) {
                     stop_playback();
                     ret = stop_recording(DVR_DEV_NO);
-                    INF("recording%d stopped\n", DVR_DEV_NO);
+                    INF("recording%d stopped, ret: %d\n", DVR_DEV_NO,ret);
                     mode = LIVE;
                     dvb_set_demux_source(DMX_DEV_NO, DVB_DEMUX_SOURCE_TS0_1);
                     start_descrambling(prog);
                     start_liveplay(prog);
                 } else {
                     ERR("Not in timeshifint mode\n");
-                    continue;
                 }
             } else if (!strncmp(buf, "pause", 5)) {
                 INF("pause, has_playback(mode=%d)=%d\n", mode, has_playback(mode));
@@ -2190,7 +2243,11 @@ int main(int argc, char *argv[])
                     antirollback_test_config(flag);
                 }
             } else if (!strncmp(buf, "ta2ta", 5)) {
-                char *data = malloc(2048);
+                char *data = (char*)malloc(2048);
+                if (data == NULL) {
+                    ERR("malloc error!\n");
+                    continue;
+                }
                 uint32_t len = 0;
                 uint32_t clientid;
                 uint32_t i;
@@ -2217,7 +2274,9 @@ int main(int argc, char *argv[])
             } else if (!strncmp(buf, "hdcp", 4)) {
                 uint8_t svc_idx = 0;
                 ret = sscanf(buf, "hdcp %hhu", &svc_idx);
-                hdcp_test_config(svc_idx);
+                if (ret == 1) {
+                    hdcp_test_config(svc_idx);
+                }
             }
         }
     };

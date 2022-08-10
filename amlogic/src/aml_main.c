@@ -79,6 +79,10 @@ static int aml_open_session(CasHandle handle, CasSession session)
     AML_PrivateInfo_t *aml_priv_info = NULL;
 
     aml_priv_info = (AML_PrivateInfo_t *)malloc(sizeof(AML_PrivateInfo_t));
+    if (aml_priv_info == NULL) {
+        CA_DEBUG(0, "malloc error!");
+        return -1;
+    }
     memset((void *)aml_priv_info, 0, sizeof(AML_PrivateInfo_t));
 
     ((CAS_SessionInfo_t *)session)->private_data = aml_priv_info;

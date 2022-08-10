@@ -299,6 +299,8 @@ static int parse_cat_section( const uint8_t *data, void *user_data )
     sec_len = ( ( p[1] << 8 | p[2] ) & 0x0FFF );
 
     p += 8;
+    if ( sec_len <= 5 )
+        return 0;
     sec_len -= 5;
     while ( sec_len > 9 ) {
         CA_DEBUG( 2, "%s, cat data: %#x, %#x, %#x, %#x, %#x, %#x ", __FUNCTION__,
@@ -307,6 +309,8 @@ static int parse_cat_section( const uint8_t *data, void *user_data )
         desc_len = p[1];
         ca_system_id = ( ( p[2] << 8 ) | p[3] );
         ca_pid = ( ( p[4] << 8 ) | p[5] ) & 0x1FFF;
+        if ( sec_len < ( desc_len + 2 ) )
+            break;
         sec_len -= ( desc_len + 2 );
         p += ( desc_len + 2 );
         if ( AM_CA_IsSystemIdSupported(ca_system_id) ) {
@@ -415,6 +419,7 @@ static void section_callback(int dev_no, int fid, const uint8_t *data, int len, 
     case 1: //CAT
         CA_DEBUG(1,"%s, get a cat section\n", __FUNCTION__);
         parse_cat_section( data, user_data );
+        break;
 
         default:
         CA_DEBUG(1, "%s, unknown section\n", __FUNCTION__);
@@ -426,7 +431,7 @@ static void section_callback(int dev_no, int fid, const uint8_t *data, int len, 
 int aml_scan(void)
 {
     int i;
-    int filter_handle;
+    int filter_handle = -1;
     struct dmx_sct_filter_params filter_param;
 
     memset(g_info, 0, sizeof(g_info));
@@ -434,6 +439,10 @@ int aml_scan(void)
 
     g_start_time = 0;
     am_dmx_alloc_filter(DMX_DEV_NO, &filter_handle);
+    if (filter_handle < 0) {
+        CA_DEBUG(1,"alloc dmx pat filter handle FAILED! %d\n", filter_handle);
+        return 0;
+    }
     CA_DEBUG(1,"alloc dmx pat filter handle = %d\n", filter_handle);
     am_dmx_set_callback(DMX_DEV_NO, filter_handle, section_callback, g_info);
     memset(&filter_param, 0, sizeof(filter_param));

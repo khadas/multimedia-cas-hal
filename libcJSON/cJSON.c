@@ -397,7 +397,7 @@ CJSON_PUBLIC(char*) cJSON_SetValuestring(cJSON *object, const char *valuestring)
 {
     char *copy = NULL;
     /* if object's type is not cJSON_String or is cJSON_IsReference, it should not set valuestring */
-    if (!(object->type & cJSON_String) || (object->type & cJSON_IsReference))
+    if (!(object->type & cJSON_String) || (object->type & cJSON_IsReference) || (object->valuestring == NULL))
     {
         return NULL;
     }
@@ -411,10 +411,7 @@ CJSON_PUBLIC(char*) cJSON_SetValuestring(cJSON *object, const char *valuestring)
     {
         return NULL;
     }
-    if (object->valuestring != NULL)
-    {
-        cJSON_free(object->valuestring);
-    }
+    cJSON_free(object->valuestring);
     object->valuestring = copy;
 
     return copy;
@@ -1232,11 +1229,6 @@ fail:
     if (buffer->buffer != NULL)
     {
         hooks->deallocate(buffer->buffer);
-    }
-
-    if (printed != NULL)
-    {
-        hooks->deallocate(printed);
     }
 
     return NULL;

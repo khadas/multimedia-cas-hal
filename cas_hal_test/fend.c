@@ -310,15 +310,6 @@ int open_fend(int fe_idx, int *fe_id)
    struct stat file_status;
 
    snprintf(fe_name, sizeof(fe_name), "/dev/dvb0.frontend%u", fe_idx);
-   if (stat(fe_name, &file_status) == 0)
-   {
-       printf("Found FE[%s]\n", fe_name);
-   }
-   else
-   {
-       printf("No FE found [%s]!", fe_name);
-	   return -1;
-   }
 
    if ((*fe_id = open(fe_name, O_RDWR | O_NONBLOCK)) < 0)
    {

@@ -247,7 +247,7 @@ smc_status_thread(void *arg)
     AM_SMC_CardStatus_t old_status = -1; //to enable force run while AC on ignore card inserted or not AM_SMC_CARD_OUT;
     while (dev->enable_thread)
     {
-        AM_SMC_CardStatus_t status;
+        AM_SMC_CardStatus_t status = -1;
         int ret;
         pthread_mutex_lock(&dev->lock);
         ret = dev->drv->get_status(dev, &status);

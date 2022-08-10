@@ -179,6 +179,10 @@ AM_RESULT AM_CA_OpenSession(CasHandle handle, CasSession* session, CA_SERVICE_TY
     CAS_ASSERT(session);
 
     *session = (CasSession)malloc(sizeof(CAS_SessionInfo_t));
+    if (*session == 0) {
+        CA_DEBUG(0, "%s, malloc FAILED.", __func__);
+        return 4; /* should change to AM_ERROR_GENERAL_ERROR after typo fix*/
+    }
     memset((void *)*session, 0x0, sizeof(CAS_SessionInfo_t));
     ((CAS_SessionInfo_t *)(*session))->cas_handle = (CAS_CasInfo_t *)handle;
 

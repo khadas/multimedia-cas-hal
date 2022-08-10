@@ -18,6 +18,7 @@
 #include "am_cas.h"
 
 #define INF(fmt, ...)       fprintf(stdout, fmt, ##__VA_ARGS__)
+#define ERR(fmt, ...)       fprintf(stderr, "error:" fmt, ##__VA_ARGS__)
 
 static pthread_t gInjectThread;
 static am_tsplayer_handle tsplayer_handle;
@@ -32,7 +33,7 @@ static int32_t seclev = AM_TSPLAYER_DMX_FILTER_SEC_LEVEL2;
 static void *inject_thread(void *arg)
 {
     int ret;
-    int fd = -1;
+    int fd;
     uint8_t *buf = NULL;
     uint32_t blksize = 0;
     char *tspath = (char *)arg;
@@ -48,100 +49,109 @@ static void *inject_thread(void *arg)
     fd = open(tspath, O_RDONLY);
     INF("%s open %s, fd:%d\n", __func__, tspath, fd);
     if (fd == -1) {
-	return NULL;
+    return NULL;
     }
 
     memset(&store_reg[0], 0, sizeof(store_reg));
     memset(&crypto_para, 0, sizeof(crypto_para));
     crypto_para.offset = 0;
     crypto_para.type = CRYPTO_TYPE_DECRYPT;
+    if (strlen(tspath) > 512) {
+        INF("%s tspath size is too large: %s, size:%d\n", __func__, tspath, strlen(tspath));
+        close(fd);
+        return NULL;
+    }
     memcpy(crypto_para.location, tspath, strlen(tspath));
     if (AM_CA_DVRReplay(cas_session, &crypto_para)) {
-	    INF("replay failed\n");
-	    close(fd);
-	    return NULL;
+        INF("replay failed\n");
+        close(fd);
+        return NULL;
     }
 
     ret = AM_CA_GetStoreRegion(cas_session, store_reg, &reg_cnt);
     if (ret) {
-	    INF("error! must get store region first\n");
+        INF("error! must get store region first\n");
     }
 
     blksize = crypto_para.buf_in.size;
     INF("blksize:%#x\n", blksize);
     if (blksize == 0) {
-	blksize = INJECT_LENGTH;
-	sec_buf_size = INJECT_LENGTH;
+    blksize = INJECT_LENGTH;
+    sec_buf_size = INJECT_LENGTH;
     }
     secmem_session = AM_CA_CreateSecmem(
-			cas_session,
-			SERVICE_PVR_PLAY,
-			&sec_buf,
-			&sec_buf_size);
+            cas_session,
+            SERVICE_PVR_PLAY,
+            &sec_buf,
+            &sec_buf_size);
     if (!secmem_session) {
-	INF("cas playback failed. secmem_session:%#x\n", secmem_session);
-	close(fd);
-	return NULL;
+    INF("cas playback failed. secmem_session:%#x\n", secmem_session);
+    close(fd);
+    return NULL;
     }
 
     buf = malloc(blksize);
+    if (buf == NULL) {
+        ERR("malloc error!");
+        close(fd);
+        return NULL;
+    }
     crypto_para.buf_out.addr = (size_t)sec_buf;
     crypto_para.buf_out.size = sec_buf_size;
     crypto_para.buf_in.addr = (size_t)buf;
     ibuf.buf_data = sec_buf;
     for (i = 0; i < reg_cnt; i++) {
-	INF("Region[%d] %lld ~ %lld\n",
-	    i,
-	    store_reg[i].start,
-	    store_reg[i].end);
+    INF("Region[%d] %lld ~ %lld\n",
+        i,
+        store_reg[i].start,
+        store_reg[i].end);
     }
     while (gInjectRunning) {
         int retry = 100;
-	int kRwSize = 0;
-	int unaligned_len = 0;
+        int kRwSize = 0;
+        int unaligned_len = 0;
         am_tsplayer_result res;
 
-	if (curr_reg_idx < reg_cnt - 1) {
-		if (crypto_para.offset + blksize >= store_reg[curr_reg_idx +1].start) {
-			unaligned_len = store_reg[curr_reg_idx + 1].start - crypto_para.offset;
-			curr_reg_idx ++;
-		}
-	}
+        if (curr_reg_idx < reg_cnt - 1) {
+            if (crypto_para.offset + blksize >= store_reg[curr_reg_idx +1].start) {
+                unaligned_len = store_reg[curr_reg_idx + 1].start - crypto_para.offset;
+                curr_reg_idx ++;
+            }
+        }
 
-	if (unaligned_len > 0) {
-	    kRwSize = read(fd, buf, unaligned_len);
-	} else {
-	    kRwSize = read(fd, buf, blksize);
-	}
-	if (kRwSize <= 0) {
-	    INF("%s read end of file\n", __func__);
-	    while (gInjectRunning) {
-		sleep(1);
-	    }
-	    break;
-	}
+        if (unaligned_len > 0) {
+            kRwSize = read(fd, buf, unaligned_len);
+        } else {
+            kRwSize = read(fd, buf, blksize);
+        }
+        if (kRwSize <= 0) {
+            INF("%s read end of file\n", __func__);
+            while (gInjectRunning) {
+                sleep(1);
+            }
+        break;
+        }
 
-	crypto_para.buf_in.size = kRwSize;
-	ret = AM_CA_DVRDecrypt(cas_session, &crypto_para);
-	if (ret) {
-		INF("Decrypt failed:%d\n", ret);
-		continue;
-	}
+        crypto_para.buf_in.size = kRwSize;
+        ret = AM_CA_DVRDecrypt(cas_session, &crypto_para);
+        if (ret) {
+            INF("Decrypt failed:%d\n", ret);
+            continue;
+        }
 
-	ibuf.buf_size = kRwSize;
-	//INF("streampos: %lld, curr_reg_idx:%d\n", crypto_para.offset, curr_reg_idx);
+        ibuf.buf_size = kRwSize;
+        //INF("streampos: %lld, curr_reg_idx:%d\n", crypto_para.offset, curr_reg_idx);
         do {
             res = AmTsPlayer_writeData(tsplayer_handle, &ibuf, kRwTimeout);
             if (res == AM_TSPLAYER_ERROR_RETRY) {
                 usleep(50000);
-		//INF("tsplayer write retry\n");
+        //INF("tsplayer write retry\n");
             } else {
-		//INF("%#x Bytes injected\n", ibuf.buf_size);
+        //INF("%#x Bytes injected\n", ibuf.buf_size);
                 break;
-	    }
-        } while(res || retry-- > 0);
+            }
+        } while(retry-- > 0);
 
-        unaligned_len = 0;
         crypto_para.offset += kRwSize;
     }
 
@@ -240,37 +250,37 @@ static void tsplayer_callback(void *user_data, am_tsplayer_event *event)
 #define AUDIO_PID 0x45
 int ext_dvr_playback(const char *path, CasHandle cas_handle)
 {
-	int vpid = VIDEO_PID, apid = AUDIO_PID;
-	int vfmt = AV_VIDEO_CODEC_MPEG2, afmt = AV_AUDIO_CODEC_MP3;
-	int error;
+    int vpid = VIDEO_PID, apid = AUDIO_PID;
+    int vfmt = AV_VIDEO_CODEC_MPEG2, afmt = AV_AUDIO_CODEC_MP3;
+    int error;
 
-	am_tsplayer_video_params vparam;
-	am_tsplayer_audio_params aparam;
-	uint32_t versionM, versionL;
-	uint32_t video_tunnel_id = 0;
-	am_tsplayer_init_params init_param =
-	{
-	  .source = TS_MEMORY,
-	  .dmx_dev_id = 0,
-	  .event_mask = 0,
-	       /*AM_TSPLAYER_EVENT_TYPE_PTS_MASK
-	     | AM_TSPLAYER_EVENT_TYPE_DTV_SUBTITLE_MASK
-	     | AM_TSPLAYER_EVENT_TYPE_USERDATA_AFD_MASK
-	     | AM_TSPLAYER_EVENT_TYPE_VIDEO_CHANGED_MASK
-	     | AM_TSPLAYER_EVENT_TYPE_AUDIO_CHANGED_MASK
-	     | AM_TSPLAYER_EVENT_TYPE_DATA_LOSS_MASK
-	     | AM_TSPLAYER_EVENT_TYPE_DATA_RESUME_MASK
-	     | AM_TSPLAYER_EVENT_TYPE_SCRAMBLING_MASK
-	     | AM_TSPLAYER_EVENT_TYPE_FIRST_FRAME_MASK,*/
-	  .drmmode = TS_INPUT_BUFFER_TYPE_SECURE,
-	};
+    am_tsplayer_video_params vparam;
+    am_tsplayer_audio_params aparam;
+    uint32_t versionM = 0, versionL = 0;
+    uint32_t video_tunnel_id = 0;
+    am_tsplayer_init_params init_param =
+    {
+      .source = TS_MEMORY,
+      .dmx_dev_id = 0,
+      .event_mask = 0,
+           /*AM_TSPLAYER_EVENT_TYPE_PTS_MASK
+         | AM_TSPLAYER_EVENT_TYPE_DTV_SUBTITLE_MASK
+         | AM_TSPLAYER_EVENT_TYPE_USERDATA_AFD_MASK
+         | AM_TSPLAYER_EVENT_TYPE_VIDEO_CHANGED_MASK
+         | AM_TSPLAYER_EVENT_TYPE_AUDIO_CHANGED_MASK
+         | AM_TSPLAYER_EVENT_TYPE_DATA_LOSS_MASK
+         | AM_TSPLAYER_EVENT_TYPE_DATA_RESUME_MASK
+         | AM_TSPLAYER_EVENT_TYPE_SCRAMBLING_MASK
+         | AM_TSPLAYER_EVENT_TYPE_FIRST_FRAME_MASK,*/
+      .drmmode = TS_INPUT_BUFFER_TYPE_SECURE,
+    };
 
     INF("external vpid:%#x vfmt:%d apid:%#x afmt:%d\n", vpid, vfmt, apid, afmt);
 
     error = AM_CA_OpenSession(
-		cas_handle,
-		&cas_session,
-		SERVICE_PVR_PLAY);
+        cas_handle,
+        &cas_session,
+        SERVICE_PVR_PLAY);
     INF("%s open cas session:%#x, start cas\n", __func__, cas_session);
 
      /*open TsPlayer*/
@@ -293,6 +303,7 @@ int ext_dvr_playback(const char *path, CasHandle cas_handle)
        result = AmTsPlayer_registerCb(tsplayer_handle,
           tsplayer_callback,
           "tsp0");
+       INF( " AmTsPlayer_registerCb %s, result(%d)\n", (result)? "FAIL" : "OK", result);
 
        result = AmTsPlayer_setWorkMode(tsplayer_handle, TS_PLAYER_MODE_NORMAL);
        INF( " TsPlayer set Workmode NORMAL %s, result(%d)\n", (result)? "FAIL" : "OK", result);
@@ -300,31 +311,31 @@ int ext_dvr_playback(const char *path, CasHandle cas_handle)
        INF( " TsPlayer set Syncmode VMASTER %s, result(%d)\n", (result)? "FAIL" : "OK", result);
 
 
-	memset(&vparam, 0, sizeof(vparam));
-	vparam.codectype = vfmt;
-	vparam.pid = vpid;
-	result = AmTsPlayer_setVideoParams(tsplayer_handle, &vparam);
-	INF( " TsPlayer set video params %s, result(%d)\n", (result)? "FAIL" : "OK", result);
-	result = AmTsPlayer_startVideoDecoding(tsplayer_handle);
-	INF( " TsPlayer start video decoding %s, result(%d)\n", (result)? "FAIL" : "OK", result);
+        memset(&vparam, 0, sizeof(vparam));
+        vparam.codectype = vfmt;
+        vparam.pid = vpid;
+        result = AmTsPlayer_setVideoParams(tsplayer_handle, &vparam);
+        INF( " TsPlayer set video params %s, result(%d)\n", (result)? "FAIL" : "OK", result);
+        result = AmTsPlayer_startVideoDecoding(tsplayer_handle);
+        INF( " TsPlayer start video decoding %s, result(%d)\n", (result)? "FAIL" : "OK", result);
 
-	memset(&aparam, 0, sizeof(aparam));
-	aparam.codectype = afmt;
-	aparam.pid = apid;
-	//aparam.seclevel = 10;
-	result = AmTsPlayer_setAudioParams(tsplayer_handle, &aparam);
-	INF( " TsPlayer set audio params %s, result(%d)\n", (result)? "FAIL" : "OK", result);
-	result = AmTsPlayer_startAudioDecoding(tsplayer_handle);
-	INF( " TsPlayer start audio decoding %s, result(%d)\n", (result)? "FAIL" : "OK", result);
+        memset(&aparam, 0, sizeof(aparam));
+        aparam.codectype = afmt;
+        aparam.pid = apid;
+        //aparam.seclevel = 10;
+        result = AmTsPlayer_setAudioParams(tsplayer_handle, &aparam);
+        INF( " TsPlayer set audio params %s, result(%d)\n", (result)? "FAIL" : "OK", result);
+        result = AmTsPlayer_startAudioDecoding(tsplayer_handle);
+        INF( " TsPlayer start audio decoding %s, result(%d)\n", (result)? "FAIL" : "OK", result);
 
-	result = AmTsPlayer_showVideo(tsplayer_handle);
-	INF( " TsPlayer show video %s, result(%d)\n", (result)? "FAIL" : "OK", result);
-	result = AmTsPlayer_setTrickMode(tsplayer_handle, AV_VIDEO_TRICK_MODE_NONE);
-	INF( " TsPlayer show audio decoding %s, result(%d)\n", (result)? "FAIL" : "OK", result);
+        result = AmTsPlayer_showVideo(tsplayer_handle);
+        INF( " TsPlayer show video %s, result(%d)\n", (result)? "FAIL" : "OK", result);
+        result = AmTsPlayer_setTrickMode(tsplayer_handle, AV_VIDEO_TRICK_MODE_NONE);
+        INF( " TsPlayer show audio decoding %s, result(%d)\n", (result)? "FAIL" : "OK", result);
     }
-	INF( "Starting playback\n");
+    INF( "Starting playback\n");
 
-	pthread_create(&gInjectThread, NULL, inject_thread, (void *)path);
+    pthread_create(&gInjectThread, NULL, inject_thread, (void *)path);
 
     return 0;
 }
@@ -333,7 +344,7 @@ int ext_dvr_playback_stop(void)
 {
     gInjectRunning = 0;
     if (gInjectThread) {
-	pthread_join(gInjectThread, NULL);
+        pthread_join(gInjectThread, NULL);
     }
     if (cas_session) {
         AM_CA_DestroySecmem(cas_session, secmem_session);

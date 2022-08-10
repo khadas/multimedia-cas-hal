@@ -371,6 +371,7 @@ int am_dmx_term(int dev_no)
     int i;
     int open_count = 0;
     dvb_dmx_filter_t *filter = NULL;
+    int ret = -1;
 
     pthread_mutex_lock(&g_dvb_dmx.lock);
 
@@ -381,7 +382,8 @@ int am_dmx_term(int dev_no)
         {
             if (filter->enable)
             {
-                ioctl(filter->fd, DMX_STOP, 0);
+                ret = ioctl(filter->fd, DMX_STOP, 0);
+                CA_DEBUG(2, "%s ret = %d", __FUNCTION__, ret);
             }
             //TODO: close here?
             close(filter->fd);
@@ -395,7 +397,9 @@ int am_dmx_term(int dev_no)
     {
         g_dvb_dmx.running = 0;
         pthread_join(g_dvb_dmx.thread, NULL);
+        pthread_mutex_unlock(&g_dvb_dmx.lock);
         pthread_mutex_destroy(&g_dvb_dmx.lock);
+        return 0;
     }
 
     pthread_mutex_unlock(&g_dvb_dmx.lock);
