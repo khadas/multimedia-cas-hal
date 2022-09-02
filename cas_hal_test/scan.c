@@ -259,9 +259,6 @@ if (p_dvb_info[index].i_video_pid == 0 ||
 
         case 0x6:
             CA_DEBUG( 1, "!!! private pes desc, todo... !!!" );
-            //p_dvb_info[index].i_aformat = AV_AUDIO_CODEC_HEAAC;
-            p_dvb_info[index].i_audio_pid = pid;
-            type = TYPE_AUDIO;
             break;
         }
 }
