@@ -1170,6 +1170,7 @@ static int watermark_test_config(
     char in_json[MAX_JSON_LEN];
     in_json[0] = '\0';
     char out_json[MAX_JSON_LEN];
+    int i;
     out_json[0] = '\0';
 
     input = cJSON_CreateObject();
@@ -1190,9 +1191,11 @@ static int watermark_test_config(
         INF("has live\n");
         AM_CA_Ioctl(play.cas_session, in_json, out_json, MAX_JSON_LEN);
     }
-    if (recorder[0].cas_session) {
-        INF("has recording\n");
-        AM_CA_Ioctl(recorder[0].cas_session, in_json, out_json, MAX_JSON_LEN);
+    for (i = 0; i < MAX_REC_NUM; i++) {
+        if (recorder[i].cas_session) {
+            INF("has recording%d\n", i);
+            AM_CA_Ioctl(recorder[i].cas_session, in_json, out_json, MAX_JSON_LEN);
+        }
     }
     INF("out_json:\n%s\n", out_json);
 
@@ -1210,6 +1213,7 @@ static int output_control_test_config(
     char in_json[MAX_JSON_LEN];
     in_json[0] = '\0';
     char out_json[MAX_JSON_LEN];
+    int i;
     out_json[0] = '\0';
 
     input = cJSON_CreateObject();
@@ -1232,9 +1236,11 @@ static int output_control_test_config(
         INF("has live\n");
         AM_CA_Ioctl(play.cas_session, in_json, out_json, MAX_JSON_LEN);
     }
-    if (recorder[0].cas_session) {
-        INF("has recording\n");
-        AM_CA_Ioctl(recorder[0].cas_session, in_json, out_json, MAX_JSON_LEN);
+    for (i = 0; i < MAX_REC_NUM; i++) {
+        if (recorder[i].cas_session) {
+            INF("has recording%d\n", i);
+            AM_CA_Ioctl(recorder[i].cas_session, in_json, out_json, MAX_JSON_LEN);
+        }
     }
     INF("out_json:\n%s\n", out_json);
 
@@ -2081,10 +2087,10 @@ int main(int argc, char *argv[])
                         if (secure_dvr) {
                             prog->scrambled = 1;
                         }
-
-                        dmx_src = DVB_DEMUX_SOURCE_TS0 + input_dev_no;
-                        if (dmx_src > DVB_DEMUX_SOURCE_DMA7) {
-                            dmx_src = DVB_DEMUX_SOURCE_TS1;
+                        //TODO: change source according by CAS encryption mode. M2M or TSE
+                        dmx_src = DVB_DEMUX_SOURCE_TS0_1 + input_dev_no;
+                        if (dmx_src > DVB_DEMUX_SOURCE_TS7_1) {
+                            dmx_src = DVB_DEMUX_SOURCE_TS0_1;
                         }
 
                         //if (prog->scrambled) {
