@@ -37,7 +37,9 @@ extern "C" {
         }\
         } while(0)
 
+#ifndef UNUSED
 #define UNUSED(x) (x=x)
+#endif
 #define CAS_ASSERT(expression)    if (!expression) { \
                                         CA_DEBUG(2, "%s, Null pointer. Line %d\n", __func__, __LINE__); \
                                         return AM_ERROR_GENERAL_ERROR; \
