@@ -10,6 +10,7 @@
 #include <signal.h>
 #include <pthread.h>
 #include "AmTsPlayer.h"
+#include <stdbool.h>
 
 #ifdef UNUSED
 #undef UNUSED
@@ -28,6 +29,12 @@ static void *sec_buf;
 static int gInjectRunning = 1;
 static AM_CA_StoreRegion_t store_reg[16];
 static int32_t seclev = AM_TSPLAYER_DMX_FILTER_SEC_LEVEL2;
+
+#ifdef MEDIASYNC
+extern bool CreateVideoTunnelId(int* id);
+static int VideoTunnelId = 0;
+
+#endif
 
 #define INJECT_LENGTH (188*1024)
 static void *inject_thread(void *arg)
@@ -289,7 +296,19 @@ int ext_dvr_playback(const char *path, CasHandle cas_handle)
           AmTsPlayer_create(init_param, &tsplayer_handle);
        INF( "open TsPlayer %s, result(%d)\n", (result)? "FAIL" : "OK", result);
 
+#ifdef MEDIASYNC
+
+       INF("Set VideoTunnelId \n");
+       if (CreateVideoTunnelId(&VideoTunnelId) == true) {
+           INF("CreateVideoTunnelId 's value: %d \n", VideoTunnelId);
+           result = AmTsPlayer_setSurface(tsplayer_handle,(void*)&VideoTunnelId);
+       } else {
+           INF("CreateVideoTunnelId error.\n");
+           return -1;
+       }
+#else
        result = AmTsPlayer_setSurface(tsplayer_handle, (void *)&video_tunnel_id);
+#endif
        INF( "TsPlayer set surface %s, result(%d)\n", (result)? "FAIL" : "OK", result);
        result = AmTsPlayer_getVersion(&versionM, &versionL);
        INF( "TsPlayer version(%d.%d) %s, result(%d)\n",
