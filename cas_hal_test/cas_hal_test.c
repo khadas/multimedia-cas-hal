@@ -787,7 +787,7 @@ static int start_liveplay(dvb_service_info_t *prog)
     }
 #else
     INF("AmTsPlayer_setSurface player_session is 0x%x,  video_tunnel_id is 0x%d\n", player_session, video_tunnel_id);
-    ret = AmTsPlayer_setSurface(player_session, (void *)video_tunnel_id);
+    ret = AmTsPlayer_setSurface(player_session, (void *)&video_tunnel_id);
 #endif
     ret |= AmTsPlayer_getInstansNo(player_session, &num);
     ret |= AmTsPlayer_setWorkMode(player_session, TS_PLAYER_MODE_NORMAL);
