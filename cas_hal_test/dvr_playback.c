@@ -328,6 +328,7 @@ int ext_dvr_playback(const char *path, CasHandle cas_handle)
        INF( " TsPlayer set Workmode NORMAL %s, result(%d)\n", (result)? "FAIL" : "OK", result);
        result = AmTsPlayer_setSyncMode(tsplayer_handle, TS_SYNC_VMASTER );
        INF( " TsPlayer set Syncmode VMASTER %s, result(%d)\n", (result)? "FAIL" : "OK", result);
+       result = AmTsPlayer_setVideoWindow(tsplayer_handle, 0, 0, 1280, 720);
 
 
         memset(&vparam, 0, sizeof(vparam));

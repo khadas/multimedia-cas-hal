@@ -793,6 +793,7 @@ static int start_liveplay(dvb_service_info_t *prog)
     ret |= AmTsPlayer_setWorkMode(player_session, TS_PLAYER_MODE_NORMAL);
     ret |= AmTsPlayer_registerCb(player_session, video_callback, NULL);
     ret |= AmTsPlayer_setSyncMode(player_session, avsyncmode);
+    ret |= AmTsPlayer_setVideoWindow(player_session, 0, 0, 1280, 720);
 #ifdef ANDROID
     am_tsplayer_audio_patch_manage_mode audio_mode = AUDIO_PATCH_MANAGE_FORCE_ENABLE;
     ret |= AmTsPlayer_setParams(player_session,
@@ -1648,6 +1649,7 @@ static int start_playback(void *params, int scrambled, int pause)
        //PLAY_DBG(" TsPlayer set Syncmode FREERUN %s, result(%d)", (result)? "FAIL" : "OK", result);
        //result = AmTsPlayer_setSyncMode(tsplayer_handle, TS_SYNC_VMASTER );
        INF( " TsPlayer set Syncmode PCRMASTER %s, result(%d)\n", (result)? "FAIL" : "OK", result);
+       result = AmTsPlayer_setVideoWindow(tsplayer_handle, 0, 0, 1280, 720);
 
 #ifdef ANDROID
        am_tsplayer_audio_patch_manage_mode audio_mode = AUDIO_PATCH_MANAGE_FORCE_ENABLE;
