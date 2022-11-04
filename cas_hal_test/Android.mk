@@ -48,8 +48,10 @@ LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE:= cas_hal_test
 LOCAL_MULTILIB := 32
 LOCAL_CFLAGS += -O0 -Werror
+ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 32&& echo OK),OK)
 LOCAL_LICENSE_KINDS:= SPDX-license-identifier-Apache-2.0 SPDX-license-identifier-BSD SPDX-license-identifier-LGPL legacy_by_exception_only
 LOCAL_LICENSE_CONDITIONS:= by_exception_only notice restricted
+endif
 
 include $(BUILD_EXECUTABLE)
 endif
@@ -110,8 +112,10 @@ LOCAL_MODULE_TAGS := optional
 LOCAL_MODULE:= cas_hal_test_sys
 LOCAL_MULTILIB := 32
 LOCAL_CFLAGS += -O0 -Werror -DMEDIASYNC -DANDROID_PLATFORM_SDK_VERSION=$(PLATFORM_SDK_VERSION)
+ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 32&& echo OK),OK)
 LOCAL_LICENSE_KINDS:= SPDX-license-identifier-Apache-2.0 SPDX-license-identifier-BSD SPDX-license-identifier-LGPL legacy_by_exception_only
 LOCAL_LICENSE_CONDITIONS:= by_exception_only notice restricted
+endif
 
 include $(BUILD_EXECUTABLE)
 endif

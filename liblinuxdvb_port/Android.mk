@@ -17,8 +17,10 @@ LOCAL_PATH := $(call my-dir)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := liblinuxdvb_port
+ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 32&& echo OK),OK)
 LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0 SPDX-license-identifier-FTL SPDX-license-identifier-GPL SPDX-license-identifier-GPL-2.0 SPDX-license-identifier-LGPL SPDX-license-identifier-LGPL-2.1 SPDX-license-identifier-MIT legacy_by_exception_only legacy_notice
 LOCAL_LICENSE_CONDITIONS := by_exception_only notice restricted
+endif
 LOCAL_MULTILIB := both
 #LOCAL_ARM_MODE := arm
 LOCAL_SRC_FILES := \
@@ -48,8 +50,10 @@ include $(BUILD_STATIC_LIBRARY)
 
 include $(CLEAR_VARS)
 LOCAL_MODULE := liblinuxdvb_port_sys
+ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 32&& echo OK),OK)
 LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0 SPDX-license-identifier-FTL SPDX-license-identifier-GPL SPDX-license-identifier-GPL-2.0 SPDX-license-identifier-LGPL SPDX-license-identifier-LGPL-2.1 SPDX-license-identifier-MIT legacy_by_exception_only legacy_notice
 LOCAL_LICENSE_CONDITIONS := by_exception_only notice restricted
+endif
 LOCAL_MULTILIB := 32
 LOCAL_ARM_MODE := arm
 LOCAL_SRC_FILES := \
