@@ -2221,7 +2221,7 @@ int main(int argc, char *argv[])
                     ret = stop_recording(DVR_DEV_NO);
                     INF("recording%d stopped, ret: %d\n", DVR_DEV_NO,ret);
                     mode = LIVE;
-                    dvb_set_demux_source(DMX_DEV_NO, DVB_DEMUX_SOURCE_TS0_1);
+                    dvb_set_demux_source(DMX_DEV_NO, DVB_DEMUX_SOURCE_TS0_1 + input_dev_no);
                     start_descrambling(prog);
                     start_liveplay(prog);
                 } else {
