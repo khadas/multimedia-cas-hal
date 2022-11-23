@@ -2067,7 +2067,7 @@ int main(int argc, char *argv[])
         INF( "* tsstart                // from live enter timeshift\n" );
         INF( "* tsstop     // timeshift stop, enter live\n" );
         INF( "* oc <value> [<AnalogProtection> <Cgmsa> <Emicci>]\n");
-        INF( "* pin <pin> <pinIdx> <reason>\n");
+        INF( "* pin <pin> <pinIdx> <reason> <dvr_dev_no>\n");
         INF( "* wm <on> <config> <strength>\n");
         INF( "* hdcp\n");
         INF( "* ta2ta <client id> <ascii input data>\n");
