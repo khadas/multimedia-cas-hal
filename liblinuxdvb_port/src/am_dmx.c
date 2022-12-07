@@ -97,7 +97,7 @@ static void* dmx_data_thread(void *arg)
 
         if (!cnt)
         {
-            usleep(20);
+            usleep(10*1000);
             continue;
         }
 
