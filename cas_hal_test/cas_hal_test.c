@@ -316,9 +316,13 @@ int init_tsplayer_inject(dvb_service_info_t *prog)
 
     am_tsplayer_video_params vparam;
     am_tsplayer_audio_params aparam;
-    am_tsplayer_init_params  parm = {tsType, drmmode, 0, 0};
+    am_tsplayer_init_params  param = {tsType, drmmode, 0, 0};
 
-    ret = AmTsPlayer_create(parm, &session);
+    if (prog->scrambled) {
+        param.drmmode = TS_INPUT_BUFFER_TYPE_TVP;
+        INF("enable local TVP\n");
+    }
+    ret = AmTsPlayer_create(param, &session);
 #ifdef MEDIASYNC
 
     INF("Set VideoTunnelId \n");
@@ -334,6 +338,12 @@ int init_tsplayer_inject(dvb_service_info_t *prog)
 #endif
     ret |= AmTsPlayer_setWorkMode(session, TS_PLAYER_MODE_NORMAL);
     ret |= AmTsPlayer_registerCb(session, video_callback, NULL);
+
+    if (prog->scrambled) {
+        AmTsPlayer_setParams(session, AM_TSPLAYER_KEY_VIDEO_SECLEVEL, &seclev);
+        AmTsPlayer_setParams(session, AM_TSPLAYER_KEY_AUDIO_SECLEVEL, &seclev);
+        CA_DEBUG(1,"%s secure level: %#x\n ", __func__, seclev);
+    }
 
     memset(&vparam, 0, sizeof(vparam));
     vparam.codectype = prog->i_vformat;
@@ -2007,8 +2017,8 @@ int main(int argc, char *argv[])
             start_descrambling(prog);
             start_liveplay(prog);
         } else if (prog && is_live_local(mode)) {
-            init_tsplayer_inject(prog);
             start_descrambling(prog);
+            init_tsplayer_inject(prog);
             gInjectRunning = 1;
             pthread_create(&gInjectThread, NULL, inject_thread, &tspath[0]);
         }
