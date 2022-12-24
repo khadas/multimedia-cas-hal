@@ -99,7 +99,11 @@ bool CreateVideoTunnelId(int* id) {
             return false;
         }
 
-        mProducerListener = new StubProducerListener;
+#if (ANDROID_PLATFORM_SDK_VERSION > 30)
+    mProducerListener = new StubProducerListener;
+#else
+    mProducerListener = new DummyProducerListener;
+#endif
 
         char test[20];
         sprintf(test,"testSurface_%d",tunnelId);
