@@ -876,6 +876,7 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
     rec_open_params.event_fn = RecEventHandler;
     rec_open_params.event_userdata = "rec0";
     rec_open_params.flags = 0;
+    rec_open_params.force_sysclock = true;
     if (is_timeshifting(mode)) {
         rec_open_params.flags |= DVR_RECORD_FLAG_ACCURATE;
         service_type = SERVICE_PVR_TIMESHIFT_RECORDING;
@@ -1679,6 +1680,7 @@ static int start_playback(void *params, int scrambled, int pause)
         play_params.crypto_data = NULL;
     }
     play_params.block_size = BLOCK_SIZE;
+    play_params.control_speed_enable = true;
     error = dvr_wrapper_open_playback(&player, &play_params);
     if (!error)
     {
