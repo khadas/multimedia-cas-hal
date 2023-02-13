@@ -2342,10 +2342,8 @@ int main(int argc, char *argv[])
                     free(data);
             } else if (!strncmp(buf, "hdcp", 4)) {
                 uint8_t svc_idx = 0;
-                ret = sscanf(buf, "hdcp %hhu", &svc_idx);
-                if (ret == 1) {
-                    hdcp_test_config(svc_idx);
-                }
+                sscanf(buf, "hdcp %hhu", &svc_idx);
+                hdcp_test_config(svc_idx);
             }
         }
     };
