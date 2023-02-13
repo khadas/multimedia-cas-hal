@@ -2081,7 +2081,7 @@ int main(int argc, char *argv[])
         INF( "* oc <value> [<AnalogProtection> <Cgmsa> <Emicci>]\n");
         INF( "* pin <pin> <pinIdx> <reason> <dvr_dev_no>\n");
         INF( "* wm <on> <config> <strength>\n");
-        INF( "* hdcp\n");
+        INF( "* hdcp <svc_idx>\n");
         INF( "* ta2ta <client id> <ascii input data>\n");
         INF( "* arb <0>/<1>\n");
         INF( "* quit\n" );
