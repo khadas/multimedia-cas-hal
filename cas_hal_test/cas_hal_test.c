@@ -142,6 +142,8 @@ static uint32_t video_tunnel_id = 0;
 #define TSN_PATH            "/sys/class/stb/tsn_source"
 #define TSN_IPTV            "local"
 #define TSN_DVB             "demod"
+#define VIDEO_AXIS_PATH     "/sys/class/video/axis"
+
 
 enum {
     LIVE        = 0x01,
@@ -1888,6 +1890,10 @@ int main(int argc, char *argv[])
     memset(&play, 0, sizeof(CasTestSession));
     memset(recorder, 0, sizeof(CasTestSession)*MAX_REC_NUM);
     amsysfs_set_sysfs_str(TSN_PATH, TSN_DVB);
+
+    char axis_buf[40];
+    sprintf(axis_buf, "%d %d %d %d", 0, 0, 0, 0);
+    amsysfs_set_sysfs_str(VIDEO_AXIS_PATH, axis_buf);
 
     if (strcmp(argv[1], "live") == 0) {
         mode = LIVE;
