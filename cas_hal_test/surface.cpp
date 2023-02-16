@@ -84,6 +84,19 @@ sp<NativeHandle> mSourceHandle = NULL;
 native_handle_t * mNative_handle = NULL;
 
 extern "C" bool CreateVideoTunnelId(int* id);
+extern "C" void ReleaseSurface();
+
+void ReleaseSurface() {
+    if (mSurface && mComposerClient && mControl) {
+        mSurface.clear();
+        mSurface = nullptr;
+        mControl.clear();
+        mControl = nullptr;
+        mComposerClient.clear();
+        mComposerClient = nullptr;
+    }
+}
+
 
 bool CreateVideoTunnelId(int* id) {
     int x = 0, y = 0, w = 0, h = 0;

@@ -181,6 +181,8 @@ extern int dvr_wrapper_set_playback_secure_buffer (DVR_WrapperPlayback_t playbac
                         uint32_t len);
 #ifdef MEDIASYNC
 extern bool CreateVideoTunnelId(int* id);
+extern void ReleaseSurface();
+
 static int VideoTunnelId = 0;
 
 #endif
@@ -1790,6 +1792,11 @@ static int cas_test_term(void)
 {
     INF("\n\n cas_test_term, mode=0x%x,has_live=%d, has_recording=%d,has_playback=%d\n",
         mode, has_live(mode), has_recording(mode), has_playback(mode));
+#ifdef MEDIASYNC
+    INF("ReleaseSureface\n");
+    ReleaseSurface();
+#endif
+
     if (has_live(mode)) {
         close_fend(g_frontend_id);
         stop_liveplay();
