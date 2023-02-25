@@ -3,8 +3,8 @@ LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 LOCAL_MODULE := libaml_dvb
 ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 32&& echo OK),OK)
-LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0 SPDX-license-identifier-BSD SPDX-license-identifier-LGPL legacy_by_exception_only
-LOCAL_LICENSE_CONDITIONS := by_exception_only notice restricted
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
+LOCAL_LICENSE_CONDITIONS := notice
 endif
 LOCAL_MULTILIB := both
 #LOCAL_ARM_MODE := arm
