@@ -65,6 +65,6 @@ LOCAL_SHARED_LIBRARIES += liblog\
   libcutils \
   libutils
 
-LOCAL_CFLAGS += -O0 -Werror
+LOCAL_CFLAGS += -O0 -Werror -DLOADSYSBIN
 
 include $(BUILD_STATIC_LIBRARY)

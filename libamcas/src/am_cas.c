@@ -56,12 +56,20 @@ int loadCASLibrary(void)
         }
 
         while ((dp = readdir(dir))) {
+#ifdef LOADSYSBIN
+            if (!strncmp(dp->d_name, "libvmx_dvb_sys.", 14)) {
+                CA_DEBUG(0, "%d, CAS plugin %s/%s found", i, path[i], dp->d_name);
+            } else {
+                continue;
+            }
+#else
             const char *pfile = strrchr(dp->d_name, '_');
             if (pfile && (!strncmp(pfile, "_dvb.", 5))) {
                 CA_DEBUG(0, "%d, CAS plugin %s/%s found", i, path[i], dp->d_name);
             } else {
                 continue;
             }
+#endif
             if (!(dl_handle = dlopen(dp->d_name, RTLD_NOW | RTLD_GLOBAL))) {
                 CA_DEBUG(0, "dlopen %s failed, %s", dp->d_name,
                      strerror(errno));
