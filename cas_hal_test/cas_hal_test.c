@@ -760,7 +760,7 @@ static int start_liveplay(dvb_service_info_t *prog)
     am_tsplayer_video_params vparam;
     am_tsplayer_audio_params aparam;
     am_tsplayer_init_params param;
-    am_tsplayer_avsync_mode avsyncmode = TS_SYNC_VMASTER;
+    am_tsplayer_avsync_mode avsyncmode = TS_SYNC_PCRMASTER;
 
     am_tsplayer_handle player_session = 0;
 
@@ -1663,7 +1663,7 @@ static int start_playback(void *params, int scrambled, int pause)
        INF( " TsPlayer set Workmode NORMAL %s, result(%d)\n", (result)? "FAIL" : "OK", result);
        //result = AmTsPlayer_setSyncMode(tsplayer_handle, TS_SYNC_NOSYNC );
        //PLAY_DBG(" TsPlayer set Syncmode FREERUN %s, result(%d)", (result)? "FAIL" : "OK", result);
-       //result = AmTsPlayer_setSyncMode(tsplayer_handle, TS_SYNC_VMASTER );
+       result = AmTsPlayer_setSyncMode(tsplayer_handle, TS_SYNC_PCRMASTER );
        INF( " TsPlayer set Syncmode PCRMASTER %s, result(%d)\n", (result)? "FAIL" : "OK", result);
 //       result = AmTsPlayer_setVideoWindow(tsplayer_handle, 0, 0, 1280, 720);
 
