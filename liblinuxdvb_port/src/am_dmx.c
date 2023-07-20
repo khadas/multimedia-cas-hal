@@ -9,7 +9,6 @@
 #include <poll.h>
 #include <fcntl.h>
 #include <errno.h>
-#include <linux/dvb/dmx.h>
 #include <pthread.h>
 #include <stdlib.h>
 #include <string.h>

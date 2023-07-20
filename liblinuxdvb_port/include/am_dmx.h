@@ -1,6 +1,8 @@
 #ifndef _AM_DMX_H
 #define _AM_DMX_H
 
+#include "dmx.h"
+
 #ifdef __cplusplus
 extern "C"
 {

@@ -26,7 +26,7 @@ static int aml_open_session(CasHandle handle, CasSession session);
 static int aml_close_session(CasSession session);
 static int aml_start_descrambling(CasSession session, AM_CA_ServiceInfo_t *service_info);
 static int aml_stop_descrambling(CasSession session);
-static int aml_ioctl(CasSession session, const char *in_json, const char *out_json, uint32_t out_len);
+static int aml_ioctl(CasSession session, const char *in_json, char *out_json, uint32_t out_len);
 static char *aml_get_version(void);
 
 const struct AM_CA_Impl_t cas_ops = 
@@ -161,7 +161,7 @@ static int aml_stop_descrambling(CasSession session)
     return 0;
 }
 
-static int aml_ioctl(CasSession session, const char *in_json, const char *out_json, uint32_t out_len)
+static int aml_ioctl(CasSession session, const char *in_json, char *out_json, uint32_t out_len)
 {
     UNUSED(session);
     UNUSED(in_json);

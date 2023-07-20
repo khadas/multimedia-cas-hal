@@ -8,7 +8,6 @@
 #include <errno.h>
 //#include <time.h>
 #include <sys/time.h>
-#include <linux/dvb/dmx.h>
 
 #include "AmTsPlayer.h"
 #include "am_dmx.h"
