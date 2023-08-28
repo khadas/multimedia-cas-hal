@@ -22,6 +22,7 @@ typedef struct {
 static int aml_pre_init(void);
 static int aml_init(CasHandle handle);
 static int aml_term(CasHandle handle);
+static int aml_isSystemIdSupported(int systemId);
 static int aml_open_session(CasHandle handle, CasSession session);
 static int aml_close_session(CasSession session);
 static int aml_start_descrambling(CasSession session, AM_CA_ServiceInfo_t *service_info);
@@ -34,6 +35,7 @@ const struct AM_CA_Impl_t cas_ops =
 .pre_init = aml_pre_init,
 .init = aml_init,
 .term = aml_term,
+.isSystemIdSupported = aml_isSystemIdSupported,
 .open_session = aml_open_session,
 .close_session = aml_close_session,
 .start_descrambling = aml_start_descrambling,
@@ -42,10 +44,14 @@ const struct AM_CA_Impl_t cas_ops =
 .get_version = aml_get_version
 };
 
+#define CA_SYSTEM_ID 0x3000  //CTI
+//#define CA_SYSTEM_ID 0x4ad4  //widevine
 static int g_keyfd;
 #if 1
-static char gOddKey[8] = {0x11, 0x11, 0x11, 0x33, 0x11, 0x11, 0x11, 0x33};
-static char gEvenKey[8] = {0x11, 0x11, 0x11, 0x33, 0x11, 0x11, 0x11, 0x33};
+//static char gOddKey[8] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
+//static char gEvenKey[8] = {0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07};
+static char gOddKey[8] = {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0};
+static char gEvenKey[8] = {0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc, 0xde, 0xf0};
 #else
 static char gOddKey[8] = {0xe6, 0x2a, 0x3b, 0x4b, 0xd0, 0x0e, 0x38, 0x16};
 static char gEvenKey[8] = {0xe6, 0x3c, 0x7c, 0x9e, 0x00, 0x43, 0xc6, 0x09};
@@ -71,6 +77,11 @@ static int aml_term(CasHandle handle)
     key_close(g_keyfd);
 
     return 0;
+}
+
+static int aml_isSystemIdSupported(int systemId)
+{
+    return (systemId == CA_SYSTEM_ID ? 1: 0);
 }
 
 static int aml_open_session(CasHandle handle, CasSession session)

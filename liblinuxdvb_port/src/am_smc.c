@@ -137,7 +137,7 @@ void ringbuffer_reset(struct ringbuffer *rbuf)
 static inline int smc_get_dev(int dev_no, AM_SMC_Device_t **dev)
 {
     if ((dev_no < 0) || (((size_t)dev_no) >= SMC_DEV_COUNT)) {
-        CA_DEBUG(1, "invalid smartcard device number %d, must in(%d~%d)", dev_no, 0, SMC_DEV_COUNT-1);
+        //CA_DEBUG(1, "invalid smartcard device number %d, must in(0~%d)", dev_no, SMC_DEV_COUNT-1);
         return AM_SMC_ERR_INVALID_DEV_NO;
     }
     *dev = &smc_devices[dev_no];
