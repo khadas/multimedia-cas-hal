@@ -15,7 +15,7 @@
  *
  * For Live:
  * \code
- *   cas_hal_test live <fend_dev_no> <input_dev_no> <prog_index> <freqM>
+ *   cas_hal_test live <fend_dev_no> <input_dev_no> <prog_index> <freqM> <isIPTV>
  * \endcode
  * For Live local:
  * \code

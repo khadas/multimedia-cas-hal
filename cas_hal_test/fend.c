@@ -6,7 +6,7 @@
 #include <errno.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <linux/dvb/frontend.h>
+#include "frontend.h"
 #include "fend.h"
 
 #define INVALID_FD        -1

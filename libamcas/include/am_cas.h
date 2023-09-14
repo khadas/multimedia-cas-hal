@@ -126,22 +126,22 @@ typedef struct AM_CA_CryptoPara_s {
 
 /**\brief Section of the table for CAS*/
 typedef enum {
-    AM_CA_SECTION_PMT,
-    AM_CA_SECTION_CAT,
-    AM_CA_SECTION_NIT,
+    AM_CA_SECTION_PMT,      /**< The PMT Section Type.*/
+    AM_CA_SECTION_CAT,      /**< The CAT Section Type.*/
+    AM_CA_SECTION_NIT,      /**< The NIT Section Type.*/
 }AM_CA_SECTION;
 
 /**\brief CAS section attribute*/
 typedef struct AM_CA_SecAttr_s {
-    uint8_t dmx_dev;
-    uint16_t service_id;
-    AM_CA_SECTION section_type;
+    uint8_t dmx_dev;            /**< The demux device's index.*/
+    uint16_t service_id;        /**< The service's index.*/
+    AM_CA_SECTION section_type; /**< Section type.*/
 }AM_CA_SecAttr_t;
 
 /**\brief CAS Store info region*/
 typedef struct AM_CA_Store_Region_s {
-    loff_t start;
-    loff_t end;
+    loff_t start;       /**< The start offset in the segment file.*/
+    loff_t end;         /**< The end offset in the segment file.*/
 }AM_CA_StoreRegion_t;
 
 /**\brief Error code of the CAS-Hal module*/
@@ -232,9 +232,13 @@ AM_RESULT AM_CA_UpdateDescramblingPid(CasSession session, uint16_t oldStreamPid,
  */
 AM_RESULT AM_CA_SetEmmPid(CasHandle handle, int dmx_dev, uint16_t emmPid);
 
-
+/**\brief Set DVR Parameters for the specified session of the CA system
+ * \param[in] session The opened session
+ * \param[in] param The param for recording
+ * \retval AM_SUCCESS On success
+ * \return Error code
+ */
 AM_RESULT AM_CA_DVRSetPreParam(CasSession session, AM_CA_PreParam_t *param);
-
 
 /**\brief Start DVR for the specified session of the CA system
  * \param[in] session The opened session
