@@ -83,9 +83,10 @@
 #define VMX_CAS_STRING "Verimatrix"
 #define NAGRA_CAS_STRING "Nagra"
 
-#define INJECT_LENGTH (188*1024)
-#define BLOCK_SIZE (188*1024)//same to asyncfifo flush size, it's enc block size and dec block size//65424
-
+#define X2_INJECT_LENGTH (256*1024)
+#define X2_BLOCK_SIZE (256*1024)
+#define X4_INJECT_LENGTH (188*1024)
+#define X4_BLOCK_SIZE (188*1024)//same to asyncfifo flush size, it's enc block size and dec block size//65424
 #define DVR_STREAM_TYPE_TO_TYPE(_t) (((_t) >> 24) & 0xF)
 #define DVR_STREAM_TYPE_TO_FMT(_t)  ((_t) & 0xFFFFFF)
 
@@ -138,6 +139,9 @@ static int check_pin_status = PIN_MAX;
 static int rec_status = 0;
 static int32_t seclev = AM_TSPLAYER_DMX_FILTER_SEC_LEVEL2;
 static uint32_t video_tunnel_id = 0;
+static uint32_t inject_length = X4_INJECT_LENGTH;
+static uint32_t block_size = X4_BLOCK_SIZE;
+
 //add for x4
 #define TSN_PATH            "/sys/class/stb/tsn_source"
 #define TSN_IPTV            "local"
@@ -267,7 +271,7 @@ bool convert_audio_codec_fmt_am2dvb(am_tsplayer_audio_codec am_fmt, DVR_AudioFor
   return result;
 }
 
-static int fend_lock(int dev_no, int freqM)
+static int fend_lock(int dev_no, int freqM, int sym)
 {
     int ret;
     int fend_id = -1;
@@ -283,7 +287,7 @@ static int fend_lock(int dev_no, int freqM)
     memset(&delivery, 0, sizeof(delivery));
     delivery.device_type = DMD_CABLE;
     delivery.delivery.cable.frequency = freqM*1000;
-    delivery.delivery.cable.symbol_rate = 5217;
+    delivery.delivery.cable.symbol_rate = sym;
     delivery.delivery.cable.modulation = DMD_MOD_QAM;//DMD_MOD_128QAM;
     ret = dmd_lock_c(fend_id, &delivery);
 
@@ -377,7 +381,7 @@ int init_tsplayer_inject(dvb_service_info_t *prog)
 static void *inject_thread(void *arg)
 {
     int fd;
-    uint8_t* buf = (uint8_t*)malloc(INJECT_LENGTH * sizeof(uint8_t));
+    uint8_t* buf = (uint8_t*)malloc(inject_length * sizeof(uint8_t));
     if (buf == NULL) {
         ERR("%s malloc FAILED\n", __func__);
         return NULL;
@@ -397,7 +401,7 @@ static void *inject_thread(void *arg)
         int kRwSize = 0;
         am_tsplayer_result res;
 
-        kRwSize = read(fd, buf, INJECT_LENGTH);
+        kRwSize = read(fd, buf, inject_length);
         if (kRwSize <= 0) {
             INF("%s read end of file, loop\n", __func__);
             lseek(fd, 0, SEEK_SET);
@@ -914,7 +918,7 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
 
     if (prog->scrambled) {
         void *buf = NULL;
-        uint32_t secmem_size = BLOCK_SIZE*20;
+        uint32_t secmem_size = block_size*20;
         SecMemHandle secmem_session;
 
         error = AM_CA_OpenSession(g_cas_handle, &recorder[dev_no].cas_session, service_type);
@@ -1517,7 +1521,7 @@ static int start_playback(void *params, int scrambled, int pause)
     int error;
 
     void *sec_buf = NULL;
-    uint32_t sec_buf_size = INJECT_LENGTH + 4*1024;
+    uint32_t sec_buf_size = inject_length + 4*1024;
     CA_SERVICE_TYPE_t service_type = SERVICE_PVR_PLAY;
     INF("start_playback,0- sec_buf_size:%d\n", sec_buf_size);
 
@@ -1683,7 +1687,7 @@ static int start_playback(void *params, int scrambled, int pause)
         play_params.crypto_fn = decrypt_callback;
         play_params.crypto_data = NULL;
     }
-    play_params.block_size = BLOCK_SIZE;
+    play_params.block_size = block_size;
     play_params.control_speed_enable = true;
     error = dvr_wrapper_open_playback(&player, &play_params);
     if (!error)
@@ -1783,7 +1787,7 @@ static void usage(int argc, char *argv[])
 {
     UNUSED(argc);
 
-    INF("Usage: live      : %s live <fend_dev_no> <input_dev_no> <prog_idx> <freqM> <isIPTV>\n", argv[0]);
+    INF("Usage: live      : %s live <fend_dev_no> <input_dev_no> <prog_idx> <freqM> <isIPTV> <sym>\n", argv[0]);
     INF("Usage: local     : %s local <tsfile> <prog_idx>\n", argv[0]);
     INF("Usage: playback  : %s dvrplay <tsfile> <scramble_flag>\n", argv[0]);
 }
@@ -1870,6 +1874,7 @@ int main(int argc, char *argv[])
     char tspath[256] = {0};
     int dvr_dev_no = 0;
     int fend_dev_no = 0;
+    int sym = 5217;
     int input_dev_no = 0;
     int prog_idx = 0;
     int scrambled = 1;
@@ -1916,6 +1921,9 @@ int main(int argc, char *argv[])
         }
         if (argc > 6) {
             sscanf(argv[6], "%d", &isIPTV);
+        }
+        if (argc > 7) {
+            sscanf(argv[7], "%d", &sym);
         }
     } else if (strcmp(argv[1], "local") == 0) {
         mode = LIVE_LOCAL;
@@ -1966,6 +1974,14 @@ int main(int argc, char *argv[])
 #endif
 #endif
 
+    if (0 == dvr_check_dmx_isNew())
+    {
+            sprintf(cmd, "echo 1 > /sys/class/stb/demux_reset_all_flag");
+            system(cmd);
+            inject_length = X2_INJECT_LENGTH;
+            block_size = X2_BLOCK_SIZE;
+    }
+
     ret = dvb_init();
     int max_try = 5;
     if (!ret) {
@@ -1986,7 +2002,7 @@ int main(int argc, char *argv[])
             }
             dvb_set_demux_source(DMX_DEV_NO, dmx_src);
 
-            fend_lock(fend_dev_no, freqM);
+            fend_lock(fend_dev_no, freqM, sym);
         } else {
             dvb_service_info_t prog;
 
@@ -2079,6 +2095,7 @@ int main(int argc, char *argv[])
     sprintf(cmd, "echo 0 > /sys/class/video/disable_video");
     system(cmd);
 
+
     while ( running ) {
         char buf[256];
         memset( buf, 0 , 256 );
@@ -2089,7 +2106,8 @@ int main(int argc, char *argv[])
         INF( "*           //algono: choose differ algo,\n" );
         INF( "* dvrstop <dvr_dev_no>   // dvrrecord stop\n" );
         INF( "* zap <prog_idx>         //zap live channel\n" );
-        INF( "* tsstart                // from live enter timeshift\n" );
+        INF( "* tsstart <algono>       // from live enter timeshift\n" );
+        INF( "*           //algono: choose differ algo,\n" );
         INF( "* tsstop     // timeshift stop, enter live\n" );
         INF( "* oc <value> [<AnalogProtection> <Cgmsa> <Emicci>]\n");
         INF( "* pin <pin> <pinIdx> <reason> <dvr_dev_no>\n");
@@ -2215,11 +2233,16 @@ int main(int argc, char *argv[])
                     continue;
                 }
                 if (is_live(mode)) {
+                    uint8_t algo;
                     stop_liveplay();
 
                     mode = TIMESHIFTING;
                     strncpy(tspath, pfilename,256);
                     tspath[255] = '\0';
+                    ret = sscanf(buf, "tsstart %hhu", &algo);
+                    if (ret >= 1) {
+                       dvr_test_config(algo);
+                    }
 
                     dvb_set_demux_source(DMX_DEV_NO, DVB_DEMUX_SOURCE_TS0 + input_dev_no);
                     ret = start_recording(DVR_DEV_NO, prog, tspath);
