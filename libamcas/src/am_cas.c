@@ -62,16 +62,12 @@ int loadCASLibrary(void)
                 CA_DEBUG(0, "%d, CAS plugin %s/%s found", i, path[i], dp->d_name);
             } else if (pfile && (!strncmp(pfile, "_dvb.", 5))) {
                 CA_DEBUG(0, "%d, CAS plugin %s/%s found", i, path[i], dp->d_name);
-            } else if (!strncmp(dp->d_name, "libdec_ca_wvcas.system.so", 25)) {
-                CA_DEBUG(0, "%d, CAS plugin %s/%s found", i, path[i], dp->d_name);
             } else {
                 continue;
             }
 #else
             const char *pfile = strrchr(dp->d_name, '_');
             if (pfile && (!strncmp(pfile, "_dvb.", 5))) {
-                CA_DEBUG(0, "%d, CAS plugin %s/%s found", i, path[i], dp->d_name);
-            } else if (!strncmp(dp->d_name, "libdec_ca_wvcas.so", 18)) {
                 CA_DEBUG(0, "%d, CAS plugin %s/%s found", i, path[i], dp->d_name);
             } else {
                 continue;
@@ -96,6 +92,57 @@ int loadCASLibrary(void)
                 dlclose(dl_handle);
                 continue;
             }
+            CA_DEBUG(0, "cas lib loaded!");
+
+            g_cas_loaded = 1;
+            closedir(dir);
+            return cas_ops->pre_init();
+        }
+
+        closedir(dir);
+    }
+
+    for (i = 0; i < sizeof(path)/sizeof(path[0]); i++) {
+        if (!(dir = opendir(path[i]))) {
+            continue;
+        }
+
+        while ((dp = readdir(dir))) {
+#ifdef LOADSYSBIN
+            const char *pfile = strrchr(dp->d_name, '_');
+            if (!strncmp(dp->d_name, "libdec_ca_wvcas.system.so", 25)) {
+                CA_DEBUG(0, "%d, WV CAS plugin %s/%s found", i, path[i], dp->d_name);
+            } else {
+                continue;
+            }
+#else
+            const char *pfile = strrchr(dp->d_name, '_');
+            if (!strncmp(dp->d_name, "libdec_ca_wvcas.so", 18)) {
+                CA_DEBUG(0, "%d, WV CAS plugin %s/%s found", i, path[i], dp->d_name);
+            } else {
+                continue;
+            }
+#endif
+            if (!(dl_handle = dlopen(dp->d_name, RTLD_NOW | RTLD_GLOBAL))) {
+                CA_DEBUG(0, "dlopen %s failed, %s", dp->d_name,
+                     strerror(errno));
+                CA_DEBUG(0, "dlerror %s", dlerror());
+                continue;
+            }
+            if (!(cas_ops = (struct AM_CA_Impl_t *)dlsym(dl_handle,
+                  "cas_ops"))) {
+                CA_DEBUG(0, "dlsym failed, %s", strerror(errno));
+                dlclose(dl_handle);
+                continue;
+            }
+
+            if (strcmp(cas_ops->get_version(), CAS_HAL_VER)) {
+                CA_DEBUG(1, "WV cas library[%s] and cas hal not matched",
+                     cas_ops->get_version());
+                dlclose(dl_handle);
+                continue;
+            }
+            CA_DEBUG(0, "WV lib loaded!");
 
             g_cas_loaded = 1;
             closedir(dir);
