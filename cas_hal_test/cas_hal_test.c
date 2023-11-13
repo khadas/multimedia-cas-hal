@@ -141,6 +141,7 @@ static int32_t seclev = AM_TSPLAYER_DMX_FILTER_SEC_LEVEL2;
 static uint32_t video_tunnel_id = 0;
 static uint32_t inject_length = X4_INJECT_LENGTH;
 static uint32_t block_size = X4_BLOCK_SIZE;
+static const char* IOCTRL_INVOKE_GET_CAS_MODE = "{\"InvokeID\":3}";
 
 //add for x4
 #define TSN_PATH            "/sys/class/stb/tsn_source"
@@ -1053,19 +1054,12 @@ static bool get_cas_mode(CasSession session)
     bool is_tse_mode = false;
     cJSON *input = NULL;
     cJSON *item = NULL;
-    char in_json[MAX_JSON_LEN];
-    in_json[0] = '\0';
     char out_json[MAX_JSON_LEN];
     out_json[0] = '\0';
 
-    input = cJSON_CreateObject();
-    item = cJSON_CreateString(ITEM_GET_CAS_MODE);
-    cJSON_AddItemToObject(input, ITEM_CMD, item);
-    cJSON_PrintPreallocated(input, in_json, MAX_JSON_LEN, 1);
     if (session)
-        AM_CA_Ioctl(session, in_json, out_json, MAX_JSON_LEN);
-    INF("%s,in_json:%s\n, out_json=%s\n", __func__, in_json, out_json);
-    cJSON_Delete(input);
+        AM_CA_Ioctl(session, IOCTRL_INVOKE_GET_CAS_MODE, out_json, MAX_JSON_LEN);
+    INF("%s, IOCTRL_INVOKE_GET_CAS_MODE:%s\n, out_json=%s\n", __func__, IOCTRL_INVOKE_GET_CAS_MODE, out_json);
 
     input = cJSON_Parse(out_json);
     item = cJSON_GetObjectItemCaseSensitive(input, ITEM_DVR_CAS_MODE);
