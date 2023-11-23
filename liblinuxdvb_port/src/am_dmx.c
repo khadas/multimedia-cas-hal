@@ -37,6 +37,7 @@ typedef struct
     int enable;
     int need_free;
     am_dmx_data_cb cb;
+    int cb_running;
     void *user_data;
 }dvb_dmx_filter_t;
 
@@ -45,6 +46,7 @@ typedef struct
     int running;
     pthread_t thread;
     pthread_mutex_t lock;
+    pthread_cond_t cond;
 
     dvb_dmx_filter_t filter[DMX_FILTER_COUNT];
 }dvb_dmx_t;
@@ -133,7 +135,14 @@ static void* dmx_data_thread(void *arg)
 
                 if (len > 0 && filter->cb)
                 {
+                    pthread_mutex_lock(&g_dvb_dmx.lock);
+                    filter->cb_running = 1;
+                    pthread_mutex_unlock(&g_dvb_dmx.lock);
                     filter->cb(filter->dev_no, fids[i], sec_buf, len, filter->user_data);
+                    pthread_mutex_lock(&g_dvb_dmx.lock);
+                    filter->cb_running = 0;
+                    pthread_mutex_unlock(&g_dvb_dmx.lock);
+                    pthread_cond_signal(&g_dvb_dmx.cond);
                 }
             }
         }
@@ -180,6 +189,7 @@ int am_dmx_init(void)
 
     memset(&g_dvb_dmx, 0, sizeof(dvb_dmx_t));
     pthread_mutex_init(&g_dvb_dmx.lock, NULL);
+    pthread_cond_init(&g_dvb_dmx.cond, NULL);
     g_dvb_dmx.running = 1;
     pthread_create(&g_dvb_dmx.thread, NULL, dmx_data_thread, &g_dvb_dmx);
 
@@ -289,7 +299,19 @@ int am_dmx_free_filter(int dev_no, int fhandle)
     filter = get_filter(dev_no, fhandle);
     if (filter)
     {
-        filter->need_free = 1;
+        if (pthread_self() != g_dvb_dmx.thread)
+        {
+            while (filter->cb_running)
+            {
+                CA_DEBUG(2, "%s wait for cb finished fhandle = %d", __FUNCTION__, fhandle);
+                pthread_cond_wait(&g_dvb_dmx.cond, &g_dvb_dmx.lock);
+            }
+        }
+        close(filter->fd);
+        filter->used = 0;
+        filter->need_free = 0;
+        filter->cb = NULL;
+        filter->cb_running = 0;
         ret = 0;
     }
 
@@ -397,6 +419,7 @@ int am_dmx_term(int dev_no)
         g_dvb_dmx.running = 0;
         pthread_join(g_dvb_dmx.thread, NULL);
         pthread_mutex_unlock(&g_dvb_dmx.lock);
+        pthread_cond_destroy(&g_dvb_dmx.cond);
         pthread_mutex_destroy(&g_dvb_dmx.lock);
         return 0;
     }
