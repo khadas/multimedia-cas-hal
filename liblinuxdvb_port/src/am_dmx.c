@@ -228,8 +228,8 @@ int am_dmx_alloc_filter(int dev_no, int *fhandle)
     }
 
     memset(dev_name, 0, sizeof(dev_name));
-    sprintf(dev_name, "/dev/dvb0.demux%d", dev_no);    
-    fd = open(dev_name, O_RDWR);
+    sprintf(dev_name, "/dev/dvb0.demux%d", dev_no);
+    fd = open(dev_name, O_RDWR | O_NONBLOCK);
     if (fd == -1)
     {
         CA_DEBUG(1, "cannot open \"%s\" (%s)", dev_name, strerror(errno));
