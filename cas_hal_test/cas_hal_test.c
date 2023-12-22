@@ -50,8 +50,6 @@
 #include <sys/stat.h>
 #include <signal.h>
 #include <stdbool.h>
-#include <sys/time.h>
-
 
 #ifdef ANDROID
 #include <cutils/properties.h>
@@ -137,7 +135,6 @@ static int mode = 0;
 static int duration=180000;
 static int size=1024*1024*1024;
 static char *pfilename = "/data/data/timeshifting.ts";
-
 static int check_pin_status = PIN_MAX;
 static int rec_status = 0;
 static int32_t seclev = AM_TSPLAYER_DMX_FILTER_SEC_LEVEL2;
@@ -145,7 +142,6 @@ static uint32_t video_tunnel_id = 0;
 static uint32_t inject_length = X4_INJECT_LENGTH;
 static uint32_t block_size = X4_BLOCK_SIZE;
 static const char* IOCTRL_INVOKE_GET_CAS_MODE = "{\"InvokeID\":3}";
-int g_nosmp = 0;
 
 //add for x4
 #define TSN_PATH            "/sys/class/stb/tsn_source"
@@ -352,11 +348,12 @@ int init_tsplayer_inject(dvb_service_info_t *prog)
     ret |= AmTsPlayer_setWorkMode(session, TS_PLAYER_MODE_NORMAL);
     ret |= AmTsPlayer_registerCb(session, video_callback, NULL);
 
-    if (prog->scrambled && !g_nosmp) {
+    if (prog->scrambled) {
         AmTsPlayer_setParams(session, AM_TSPLAYER_KEY_VIDEO_SECLEVEL, &seclev);
         AmTsPlayer_setParams(session, AM_TSPLAYER_KEY_AUDIO_SECLEVEL, &seclev);
         CA_DEBUG(1,"%s secure level: %#x\n ", __func__, seclev);
     }
+
     memset(&vparam, 0, sizeof(vparam));
     vparam.codectype = prog->i_vformat;
 
@@ -495,13 +492,11 @@ static DVR_Result_t encrypt_callback(DVR_CryptoParams_t *params, void *userdata)
     int ret;
     CasSession cas_session = *(CasSession *)userdata;
     AM_CA_CryptoPara_t *cryptoPara = (AM_CA_CryptoPara_t *)params;
-    struct timespec start_ts, end_ts;
 
     if (!cas_session) {
         ERR("%s invalid cas session\n", __func__);
         return -1;
     }
-    clock_gettime(CLOCK_MONOTONIC, &start_ts);
 
     ret = AM_CA_DVREncrypt(cas_session, cryptoPara);
     if (ret) {
@@ -510,12 +505,6 @@ static DVR_Result_t encrypt_callback(DVR_CryptoParams_t *params, void *userdata)
         ERR("%s failed\n", __func__);
         return -1;
     }
-    clock_gettime(CLOCK_MONOTONIC, &end_ts);
-
-    CA_DEBUG(1,"%s AM_CA_DVREncrypt use (%d) ms for (0x%x) bytes\n ", __func__,
-            (end_ts.tv_sec*1000 + end_ts.tv_nsec/1000000) -
-            (start_ts.tv_sec*1000 + start_ts.tv_nsec/1000000),
-            cryptoPara->buf_len);
 
     if (cryptoPara->buf_len) {
         //INF("%#x bytes encrypted\n", cryptoPara->buf_len);
@@ -528,7 +517,6 @@ static DVR_Result_t decrypt_callback(DVR_CryptoParams_t *params, void *userdata)
 {
     int ret;
     UNUSED(userdata);
-    struct timespec start_ts, end_ts;
 
     AM_CA_CryptoPara_t *cryptoPara = (AM_CA_CryptoPara_t *)params;
 
@@ -551,7 +539,6 @@ static DVR_Result_t decrypt_callback(DVR_CryptoParams_t *params, void *userdata)
             return 0;
         }
     }
-    clock_gettime(CLOCK_MONOTONIC, &start_ts);
 
     ret = AM_CA_DVRDecrypt(play.cas_session, cryptoPara);
     if (ret) {
@@ -564,12 +551,6 @@ static DVR_Result_t decrypt_callback(DVR_CryptoParams_t *params, void *userdata)
     if (cryptoPara->buf_len) {
         //INF("%#x bytes decrypted\n", cryptoPara->buf_len);
     }
-    clock_gettime(CLOCK_MONOTONIC, &end_ts);
-
-    CA_DEBUG(1,"%s AM_CA_DVRDecrypt use (%d) ms for (0x%x) bytes.\n ", __func__,
-            (end_ts.tv_sec*1000 + end_ts.tv_nsec/1000000) -
-            (start_ts.tv_sec*1000 + start_ts.tv_nsec/1000000),
-            cryptoPara->buf_len);
 
     return 0;
 }
@@ -796,23 +777,23 @@ static int start_liveplay(dvb_service_info_t *prog)
     memset(&param, 0 , sizeof(am_tsplayer_init_params));
     param.source = TS_DEMOD;
     param.dmx_dev_id = DMX_DEV_NO;
-
-    if (prog->scrambled && !g_nosmp) {
+    if (prog->scrambled) {
         param.drmmode = TS_INPUT_BUFFER_TYPE_TVP;
         INF("enable live TVP\n");
     }
+
     ret = AmTsPlayer_create(param, &player_session);
     if (ret != AM_TSPLAYER_OK) {
         CA_DEBUG(0, "Create tsplayer failed!!!! err:%x", ret);
         return -1;
     }
     play.player_session = player_session;
-
-    if (prog->scrambled && !g_nosmp) {
+    if (prog->scrambled) {
         AmTsPlayer_setParams(player_session, AM_TSPLAYER_KEY_VIDEO_SECLEVEL, &seclev);
         AmTsPlayer_setParams(player_session, AM_TSPLAYER_KEY_AUDIO_SECLEVEL, &seclev);
         CA_DEBUG(1,"%s secure level: %#x\n ", __func__, seclev);
     }
+
 #ifdef MEDIASYNC
 
     INF("Set VideoTunnelId \n");
@@ -905,10 +886,6 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
     rec_open_params.event_userdata = "rec0";
     rec_open_params.flags = 0;
     rec_open_params.force_sysclock = true;
-    if (g_nosmp == 1) {
-        rec_open_params.flush_size = 188 * 1024;
-    }
-
     if (is_timeshifting(mode)) {
         rec_open_params.flags |= DVR_RECORD_FLAG_ACCURATE;
         service_type = SERVICE_PVR_TIMESHIFT_RECORDING;
@@ -1013,7 +990,7 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
             return -1;
         }
 
-        if (false == tse_mode && !g_nosmp) {
+        if (false == tse_mode) {
             secmem_session = AM_CA_CreateSecmem(
                 recorder[dev_no].cas_session,
                 service_type,
@@ -1060,8 +1037,7 @@ static int start_recording(int dev_no, dvb_service_info_t *prog, char *tspath)
     {
         ERR( "recorder start fail = (0x%x)\n", error);
         dvr_wrapper_close_record(recorder_session);
-
-        if (false == tse_mode && !g_nosmp) {
+        if (false == tse_mode) {
             AM_CA_DestroySecmem(recorder[dev_no].cas_session, recorder[dev_no].secmem_session);
             recorder[dev_no].secmem_session = (SecMemHandle)NULL;
         }
@@ -1452,8 +1428,7 @@ static int stop_recording(int dev_no)
     if (cas_session) {
         bool tse_mode = get_cas_mode(cas_session);
         AM_CA_DVRStop(cas_session);
-
-        if (!tse_mode && !g_nosmp) {
+        if (!tse_mode) {
             ret = AM_CA_DestroySecmem(cas_session, recorder[dev_no].secmem_session);
             if (ret) {
                 ERR("destroy secmem failed:%d\n", ret);
@@ -1598,8 +1573,7 @@ static int start_playback(void *params, int scrambled, int pause)
         AM_CA_DVRSetPreParam(play.cas_session, &preParam);
 
         tse_mode = get_cas_mode(play.cas_session);
-
-        if (!tse_mode && !g_nosmp) {
+        if (!tse_mode) {
             play.secmem_session = AM_CA_CreateSecmem(
                     play.cas_session,
                     service_type,
@@ -1641,8 +1615,7 @@ static int start_playback(void *params, int scrambled, int pause)
            init_param.dmx_dev_id = DMX_DEV_NO_2ND;
        }
        if (!tse_mode) {
-
-           if (scrambled && !g_nosmp) {
+           if (scrambled) {
                init_param.drmmode = TS_INPUT_BUFFER_TYPE_SECURE;
            }
        } else {
@@ -1678,12 +1651,12 @@ static int start_playback(void *params, int scrambled, int pause)
           tsplayer_callback,
           "tsp0");
        INF( " AmTsPlayer_registerCb %s, result(%d)\n", (result)? "FAIL" : "OK", result);
-
-       if (!tse_mode && scrambled && !g_nosmp) {
+       if (!tse_mode && scrambled) {
            AmTsPlayer_setParams(tsplayer_handle, AM_TSPLAYER_KEY_VIDEO_SECLEVEL, &seclev);
            AmTsPlayer_setParams(tsplayer_handle, AM_TSPLAYER_KEY_AUDIO_SECLEVEL, &seclev);
            CA_DEBUG(1,"%s secure level: %#x\n ", __func__, seclev);
        }
+
        result = AmTsPlayer_setWorkMode(tsplayer_handle, TS_PLAYER_MODE_NORMAL);
        INF( " TsPlayer set Workmode NORMAL %s, result(%d)\n", (result)? "FAIL" : "OK", result);
        //result = AmTsPlayer_setSyncMode(tsplayer_handle, TS_SYNC_NOSYNC );
@@ -1718,8 +1691,7 @@ static int start_playback(void *params, int scrambled, int pause)
        play.dvr_session = (void *)player;
 
        if (!tse_mode) {
-
-           if (scrambled && g_nosmp) {
+           if (scrambled) {
                INF("cas playback set secure buffer:%p, secure buffer size:%#x\n",
                             sec_buf, sec_buf_size);
                dvr_wrapper_set_playback_secure_buffer(player, sec_buf, sec_buf_size);
@@ -1792,8 +1764,7 @@ static int stop_playback(void)
     if (play.cas_session) {
         bool tse_mode = get_cas_mode(play.cas_session);
         AM_CA_DVRStopReplay(play.cas_session);
-
-        if (!tse_mode && !g_nosmp) {
+        if (!tse_mode) {
             AM_CA_DestroySecmem(play.cas_session, play.secmem_session);
         }
         AM_CA_CloseSession(play.cas_session);
@@ -1813,7 +1784,6 @@ static void usage(int argc, char *argv[])
     INF("Usage: live      : %s live <fend_dev_no> <input_dev_no> <prog_idx> <freqM> <isIPTV> <sym>\n", argv[0]);
     INF("Usage: local     : %s local <tsfile> <prog_idx>\n", argv[0]);
     INF("Usage: playback  : %s dvrplay <tsfile> <scramble_flag>\n", argv[0]);
-    INF("Usage: NOSMP=1   : S1A part don't use smp feature. need export it.\n", argv[0]);
 }
 
 static int cas_test_term(void)
@@ -1909,21 +1879,10 @@ int main(int argc, char *argv[])
     char *secdvr = getenv("SECDVR");
     int secure_dvr = 0;
 
-    char *nosmp = getenv("NOSMP");
-    g_nosmp = 0;
-
     if (secdvr) {
         secure_dvr = atoi(secdvr);
         if (secure_dvr) {
             INF("enable secure dvr for FTA stream\n");
-        }
-    }
-
-    if (nosmp) {
-        g_nosmp = atoi(nosmp);
-        if (g_nosmp) {
-            INF("No smp part such as S1A.\n");
-            pfilename = "/mnt/pvrdisk/timeshifting.ts";
         }
     }
 
@@ -2231,6 +2190,7 @@ int main(int argc, char *argv[])
                         ret = start_recording(dvr_dev_no, prog, tspath);
                         if (!ret) {
                             mode |= RECORDING;
+                            pfilename = tspath;
                             rec_status |= (1 << dvr_dev_no);
                             INF("recording%d started\n", dvr_dev_no);
                         } else {

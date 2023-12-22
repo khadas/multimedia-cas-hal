@@ -1,7 +1,3 @@
-#ifndef CA_DEBUG_LEVEL
-#define CA_DEBUG_LEVEL 2
-#endif
-
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,7 +11,6 @@
 #include <pthread.h>
 #include "AmTsPlayer.h"
 #include <stdbool.h>
-#include <sys/time.h>
 
 #ifdef UNUSED
 #undef UNUSED
@@ -34,7 +29,6 @@ static void *sec_buf;
 static int gInjectRunning = 1;
 static AM_CA_StoreRegion_t store_reg[16];
 static int32_t seclev = AM_TSPLAYER_DMX_FILTER_SEC_LEVEL2;
-extern int g_nosmp;
 
 #ifdef MEDIASYNC
 extern bool CreateVideoTunnelId(int* id);
@@ -53,12 +47,7 @@ static void *inject_thread(void *arg)
     const int kRwTimeout = 30000;
     uint32_t sec_buf_size = 0;
     AM_CA_CryptoPara_t crypto_para;
-    struct timespec start_ts, end_ts;
     am_tsplayer_input_buffer ibuf = {TS_INPUT_BUFFER_TYPE_SECURE, NULL, 0};
-
-    if (g_nosmp == 1) {
-        ibuf.buf_type = TS_INPUT_BUFFER_TYPE_NORMAL;
-    }
 
     uint8_t i = 0;
     uint8_t reg_cnt = 0;
@@ -94,31 +83,18 @@ static void *inject_thread(void *arg)
     blksize = crypto_para.buf_in.size;
     INF("blksize:%#x\n", blksize);
     if (blksize == 0) {
-        blksize = INJECT_LENGTH;
-        sec_buf_size = INJECT_LENGTH;
+    blksize = INJECT_LENGTH;
+    sec_buf_size = INJECT_LENGTH;
     }
-    else {
-        sec_buf_size = blksize *2;
-    }
-    if (g_nosmp) {
-        sec_buf = malloc(sec_buf_size);
-        if (sec_buf == NULL) {
-            ERR("malloc error!");
-            close(fd);
-            return NULL;
-        }
-    }
-    else {
-        secmem_session = AM_CA_CreateSecmem(
-                cas_session,
-                SERVICE_PVR_PLAY,
-                &sec_buf,
-                &sec_buf_size);
-        if (!secmem_session) {
-        INF("cas playback failed. secmem_session:%#x\n", secmem_session);
-        close(fd);
-        return NULL;
-        }
+    secmem_session = AM_CA_CreateSecmem(
+            cas_session,
+            SERVICE_PVR_PLAY,
+            &sec_buf,
+            &sec_buf_size);
+    if (!secmem_session) {
+    INF("cas playback failed. secmem_session:%#x\n", secmem_session);
+    close(fd);
+    return NULL;
     }
 
     buf = malloc(blksize);
@@ -164,19 +140,11 @@ static void *inject_thread(void *arg)
         }
 
         crypto_para.buf_in.size = kRwSize;
-        clock_gettime(CLOCK_MONOTONIC, &start_ts);
-
         ret = AM_CA_DVRDecrypt(cas_session, &crypto_para);
         if (ret) {
             INF("Decrypt failed:%d\n", ret);
             continue;
         }
-        clock_gettime(CLOCK_MONOTONIC, &end_ts);
-
-        CA_DEBUG(1,"%s AM_CA_DVRDecrypt use (%d) ms for (0x%x) bytes.\n ", __func__,
-                (end_ts.tv_sec*1000 + end_ts.tv_nsec/1000000) -
-                (start_ts.tv_sec*1000 + start_ts.tv_nsec/1000000),
-                crypto_para.buf_len);
 
         ibuf.buf_size = kRwSize;
         //INF("streampos: %lld, curr_reg_idx:%d\n", crypto_para.offset, curr_reg_idx);
@@ -195,9 +163,6 @@ static void *inject_thread(void *arg)
     }
 
     free(buf);
-    if (g_nosmp) {
-        free(sec_buf);
-    }
     close(fd);
     INF("exit %s\n", __func__);
     return NULL;
@@ -300,7 +265,6 @@ int ext_dvr_playback(const char *path, CasHandle cas_handle)
     am_tsplayer_audio_params aparam;
     uint32_t versionM = 0, versionL = 0;
     uint32_t video_tunnel_id = 0;
-
     am_tsplayer_init_params init_param =
     {
       .source = TS_MEMORY,
@@ -317,9 +281,6 @@ int ext_dvr_playback(const char *path, CasHandle cas_handle)
          | AM_TSPLAYER_EVENT_TYPE_FIRST_FRAME_MASK,*/
       .drmmode = TS_INPUT_BUFFER_TYPE_SECURE,
     };
-    if (g_nosmp) {
-        init_param.drmmode =TS_INPUT_BUFFER_TYPE_NORMAL;
-    }
 
     INF("external vpid:%#x vfmt:%d apid:%#x afmt:%d\n", vpid, vfmt, apid, afmt);
 
@@ -354,10 +315,9 @@ int ext_dvr_playback(const char *path, CasHandle cas_handle)
           versionM, versionL,
           (result)? "FAIL" : "OK",
           result);
-        if (!g_nosmp) {
-           AmTsPlayer_setParams(tsplayer_handle, AM_TSPLAYER_KEY_VIDEO_SECLEVEL, &seclev);
-           AmTsPlayer_setParams(tsplayer_handle, AM_TSPLAYER_KEY_AUDIO_SECLEVEL, &seclev);
-        }
+
+       AmTsPlayer_setParams(tsplayer_handle, AM_TSPLAYER_KEY_VIDEO_SECLEVEL, &seclev);
+       AmTsPlayer_setParams(tsplayer_handle, AM_TSPLAYER_KEY_AUDIO_SECLEVEL, &seclev);
 
        result = AmTsPlayer_registerCb(tsplayer_handle,
           tsplayer_callback,
@@ -407,14 +367,7 @@ int ext_dvr_playback_stop(void)
         pthread_join(gInjectThread, NULL);
     }
     if (cas_session) {
-        if (g_nosmp) {
-            if (sec_buf) {
-                free (sec_buf);
-        }
-        }
-        else {
-            AM_CA_DestroySecmem(cas_session, secmem_session);
-        }
+        AM_CA_DestroySecmem(cas_session, secmem_session);
         AM_CA_CloseSession(cas_session);
     }
     AmTsPlayer_stopAudioDecoding(tsplayer_handle);
