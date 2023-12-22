@@ -512,7 +512,7 @@ static DVR_Result_t encrypt_callback(DVR_CryptoParams_t *params, void *userdata)
     }
     clock_gettime(CLOCK_MONOTONIC, &end_ts);
 
-    CA_DEBUG(1,"%s AM_CA_DVREncrypt use (%ld) ms for (0x%x) bytes\n ", __func__,
+    CA_DEBUG(1,"%s AM_CA_DVREncrypt use (%d) ms for (0x%x) bytes\n ", __func__,
             (end_ts.tv_sec*1000 + end_ts.tv_nsec/1000000) -
             (start_ts.tv_sec*1000 + start_ts.tv_nsec/1000000),
             cryptoPara->buf_len);
@@ -566,7 +566,7 @@ static DVR_Result_t decrypt_callback(DVR_CryptoParams_t *params, void *userdata)
     }
     clock_gettime(CLOCK_MONOTONIC, &end_ts);
 
-    CA_DEBUG(1,"%s AM_CA_DVRDecrypt use (%ld) ms for (0x%x) bytes.\n ", __func__,
+    CA_DEBUG(1,"%s AM_CA_DVRDecrypt use (%d) ms for (0x%x) bytes.\n ", __func__,
             (end_ts.tv_sec*1000 + end_ts.tv_nsec/1000000) -
             (start_ts.tv_sec*1000 + start_ts.tv_nsec/1000000),
             cryptoPara->buf_len);
