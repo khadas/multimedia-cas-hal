@@ -510,17 +510,14 @@ static DVR_Result_t encrypt_callback(DVR_CryptoParams_t *params, void *userdata)
         ERR("%s failed\n", __func__);
         return -1;
     }
-    clock_gettime(CLOCK_MONOTONIC, &end_ts);
-
-    CA_DEBUG(1,"%s AM_CA_DVREncrypt use (%lu) ms for (0x%x) bytes\n ", __func__,
-            (end_ts.tv_sec*1000 + end_ts.tv_nsec/1000000) -
-            (start_ts.tv_sec*1000 + start_ts.tv_nsec/1000000),
-            cryptoPara->buf_len);
 
     if (cryptoPara->buf_len) {
-        //INF("%#x bytes encrypted\n", cryptoPara->buf_len);
-    }
-
+        clock_gettime(CLOCK_MONOTONIC, &end_ts);
+        CA_DEBUG(1,"%s AM_CA_DVREncrypt use (%lu) ms for (0x%x) bytes\n ", __func__,
+                (end_ts.tv_sec*1000 + end_ts.tv_nsec/1000000) -
+                (start_ts.tv_sec*1000 + start_ts.tv_nsec/1000000),
+                cryptoPara->buf_len);
+     }
     return 0;
 }
 
@@ -564,12 +561,13 @@ static DVR_Result_t decrypt_callback(DVR_CryptoParams_t *params, void *userdata)
     if (cryptoPara->buf_len) {
         //INF("%#x bytes decrypted\n", cryptoPara->buf_len);
     }
-    clock_gettime(CLOCK_MONOTONIC, &end_ts);
-
-    CA_DEBUG(1,"%s AM_CA_DVRDecrypt use (%lu) ms for (0x%x) bytes.\n ", __func__,
-            (end_ts.tv_sec*1000 + end_ts.tv_nsec/1000000) -
-            (start_ts.tv_sec*1000 + start_ts.tv_nsec/1000000),
-            cryptoPara->buf_len);
+    if (cryptoPara->buf_len) {
+        clock_gettime(CLOCK_MONOTONIC, &end_ts);
+        CA_DEBUG(1,"%s AM_CA_DVRDecrypt use (%lu) ms for (0x%x) bytes.\n ", __func__,
+                (end_ts.tv_sec*1000 + end_ts.tv_nsec/1000000) -
+                (start_ts.tv_sec*1000 + start_ts.tv_nsec/1000000),
+                cryptoPara->buf_len);
+    }
 
     return 0;
 }
@@ -1719,7 +1717,7 @@ static int start_playback(void *params, int scrambled, int pause)
 
        if (!tse_mode) {
 
-           if (scrambled && g_nosmp) {
+           if (scrambled && !g_nosmp) {
                INF("cas playback set secure buffer:%p, secure buffer size:%#x\n",
                             sec_buf, sec_buf_size);
                dvr_wrapper_set_playback_secure_buffer(player, sec_buf, sec_buf_size);
