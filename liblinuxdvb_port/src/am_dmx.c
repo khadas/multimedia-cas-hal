@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/time.h>
 
 #include "am_cas.h"
 #include "am_dmx.h"
@@ -52,6 +53,21 @@ typedef struct
 }dvb_dmx_t;
 
 static dvb_dmx_t g_dvb_dmx;
+
+static long long tm_to_ns(struct timespec tm)
+{
+  return tm.tv_sec * 1000000000 + tm.tv_nsec;
+}
+
+static struct timespec ns_to_tm(long long ns)
+{
+  struct timespec tm;
+  tm.tv_sec = ns / 1000000000;
+  tm.tv_nsec = ns - (tm.tv_sec * 1000000000);
+  return tm;
+}
+
+
 
 static void* dmx_data_thread(void *arg)
 {
@@ -138,11 +154,15 @@ static void* dmx_data_thread(void *arg)
                     pthread_mutex_lock(&g_dvb_dmx.lock);
                     filter->cb_running = 1;
                     pthread_mutex_unlock(&g_dvb_dmx.lock);
+
                     filter->cb(filter->dev_no, fids[i], sec_buf, len, filter->user_data);
+
                     pthread_mutex_lock(&g_dvb_dmx.lock);
                     filter->cb_running = 0;
                     pthread_mutex_unlock(&g_dvb_dmx.lock);
+
                     pthread_cond_signal(&g_dvb_dmx.cond);
+
                 }
             }
         }
@@ -193,7 +213,6 @@ int am_dmx_init(void)
     g_dvb_dmx.running = 1;
     pthread_create(&g_dvb_dmx.thread, NULL, dmx_data_thread, &g_dvb_dmx);
 
-    CA_DEBUG(2, "%s", __FUNCTION__);
     return 0;
 }
 
@@ -293,6 +312,11 @@ int am_dmx_free_filter(int dev_no, int fhandle)
 {
     int ret = -1;
     dvb_dmx_filter_t *filter = NULL;
+    struct timespec start_tm;
+    struct timespec end_tm;
+    int timeout_ms = 10;
+
+
 
     pthread_mutex_lock(&g_dvb_dmx.lock);
 
@@ -304,9 +328,14 @@ int am_dmx_free_filter(int dev_no, int fhandle)
             while (filter->cb_running)
             {
                 CA_DEBUG(2, "%s wait for cb finished fhandle = %d", __FUNCTION__, fhandle);
-                pthread_cond_wait(&g_dvb_dmx.cond, &g_dvb_dmx.lock);
+                clock_gettime(CLOCK_MONOTONIC, &start_tm);
+                end_tm = ns_to_tm(tm_to_ns(start_tm) + timeout_ms*1000000);
+
+                pthread_cond_timedwait(&g_dvb_dmx.cond, &g_dvb_dmx.lock, &end_tm);
+                break;
             }
         }
+
         close(filter->fd);
         filter->used = 0;
         filter->need_free = 0;
