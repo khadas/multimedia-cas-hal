@@ -97,11 +97,9 @@ static void *inject_thread(void *arg)
         blksize = INJECT_LENGTH;
         sec_buf_size = INJECT_LENGTH;
     }
-    else {
-        sec_buf_size = blksize *2;
-    }
+
     if (g_nosmp) {
-        sec_buf = malloc(sec_buf_size);
+        sec_buf = malloc(blksize *2);
         if (sec_buf == NULL) {
             ERR("malloc error!");
             close(fd);
