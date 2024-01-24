@@ -55,3 +55,42 @@ endif
 
 include $(BUILD_EXECUTABLE)
 endif
+
+
+include $(CLEAR_VARS)
+
+ifeq ($(SUPPORT_CAS), true)
+LOCAL_SRC_FILES:= \
+    tunnel_id.c \
+    surface.cpp
+
+LOCAL_C_INCLUDES := \
+    $(LOCAL_PATH)/../libamcas/include \
+    vendor/amlogic/common/mediahal_sdk/include \
+    hardware/amlogic/gralloc
+
+LOCAL_SHARED_LIBRARIES := liblog
+
+LOCAL_STATIC_LIBRARIES += \
+    libam_cas_sys
+
+LOCAL_SHARED_LIBRARIES += \
+    libutils \
+    libcutils \
+    libbase \
+    libbinder \
+    libui \
+    libgui \
+    libamgralloc_ext
+
+LOCAL_MODULE_TAGS := optional
+LOCAL_MODULE:= tunnel_id
+LOCAL_MULTILIB := 32
+LOCAL_CFLAGS += -O0 -Werror -DANDROID_PLATFORM_SDK_VERSION=$(PLATFORM_SDK_VERSION)
+ifeq ($(shell test $(PLATFORM_SDK_VERSION) -ge 32&& echo OK),OK)
+LOCAL_LICENSE_KINDS := SPDX-license-identifier-Apache-2.0
+LOCAL_LICENSE_CONDITIONS := notice
+endif
+
+include $(BUILD_EXECUTABLE)
+endif

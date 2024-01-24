@@ -188,13 +188,6 @@ extern int ext_dvr_playback(const char *path, CasHandle cas_handle);
 extern int dvr_wrapper_set_playback_secure_buffer (DVR_WrapperPlayback_t playback,
                         uint8_t *p_secure_buf,
                         uint32_t len);
-#ifdef MEDIASYNC
-extern bool CreateVideoTunnelId(int* id);
-extern void ReleaseSurface();
-
-static int VideoTunnelId = 0;
-
-#endif
 
 int amsysfs_set_sysfs_str(const char *path, const char *val);
 
@@ -336,19 +329,7 @@ int init_tsplayer_inject(dvb_service_info_t *prog)
         INF("enable local TVP\n");
     }
     ret = AmTsPlayer_create(param, &session);
-#ifdef MEDIASYNC
-
-    INF("Set VideoTunnelId \n");
-    if (CreateVideoTunnelId(&VideoTunnelId) == true) {
-        INF("CreateVideoTunnelId 's value: %d \n", VideoTunnelId);
-        ret = AmTsPlayer_setSurface(session,(void*)&VideoTunnelId);
-    } else {
-        INF("CreateVideoTunnelId error.\n");
-        return -1;
-    }
-#else
     ret |= AmTsPlayer_setSurface(session, (void *)&video_tunnel_id);
-#endif
     ret |= AmTsPlayer_setWorkMode(session, TS_PLAYER_MODE_NORMAL);
     ret |= AmTsPlayer_registerCb(session, video_callback, NULL);
 
@@ -811,20 +792,8 @@ static int start_liveplay(dvb_service_info_t *prog)
         AmTsPlayer_setParams(player_session, AM_TSPLAYER_KEY_AUDIO_SECLEVEL, &seclev);
         CA_DEBUG(1,"%s secure level: %#x\n ", __func__, seclev);
     }
-#ifdef MEDIASYNC
-
-    INF("Set VideoTunnelId \n");
-    if (CreateVideoTunnelId(&VideoTunnelId) == true) {
-        INF("CreateVideoTunnelId 's value: %d \n", VideoTunnelId);
-        ret = AmTsPlayer_setSurface(player_session,(void*)&VideoTunnelId);
-    } else {
-        INF("CreateVideoTunnelId error.\n");
-        return -1;
-    }
-#else
     INF("AmTsPlayer_setSurface player_session is 0x%x,  video_tunnel_id is 0x%d\n", player_session, video_tunnel_id);
     ret = AmTsPlayer_setSurface(player_session, (void *)&video_tunnel_id);
-#endif
     ret |= AmTsPlayer_getInstansNo(player_session, &num);
     ret |= AmTsPlayer_setWorkMode(player_session, TS_PLAYER_MODE_NORMAL);
     ret |= AmTsPlayer_registerCb(player_session, video_callback, NULL);
@@ -1652,19 +1621,7 @@ static int start_playback(void *params, int scrambled, int pause)
           AmTsPlayer_create(init_param, &tsplayer_handle);
        INF( "open TsPlayer %s, result(%d)\n", (result)? "FAIL" : "OK", result);
 
-#ifdef MEDIASYNC
-
-       INF("Set VideoTunnelId \n");
-       if (CreateVideoTunnelId(&VideoTunnelId) == true) {
-           INF("CreateVideoTunnelId 's value: %d \n", VideoTunnelId);
-           result = AmTsPlayer_setSurface(tsplayer_handle,(void*)&VideoTunnelId);
-       } else {
-           INF("CreateVideoTunnelId error.\n");
-           return -1;
-       }
-#else
        result = AmTsPlayer_setSurface(tsplayer_handle, (void *)&video_tunnel_id);
-#endif
        INF( "set surface %s, result(%d)\n", (result)? "FAIL" : "OK", result);
        result = AmTsPlayer_getVersion(&versionM, &versionL);
        INF( "TsPlayer version(%d.%d) %s, result(%d)\n",
@@ -1818,10 +1775,6 @@ static int cas_test_term(void)
 {
     INF("\n\n cas_test_term, mode=0x%x,has_live=%d, has_recording=%d,has_playback=%d\n",
         mode, has_live(mode), has_recording(mode), has_playback(mode));
-#ifdef MEDIASYNC
-    INF("ReleaseSureface\n");
-    ReleaseSurface();
-#endif
 
     if (has_live(mode)) {
         close_fend(g_frontend_id);
@@ -1997,15 +1950,6 @@ int main(int argc, char *argv[])
 
     INF("@@@in cas_hal_test mode = 0x%x\n", mode);
 
-#ifdef ANDROID
-#ifdef MEDIASYNC
-    property_set("vendor.amtsplayer.pipeline", "1");
-    property_set("vendor.dtv.audio.skipamadec", "true");
-#else
-    property_set("vendor.amtsplayer.pipeline", "0");
-    property_set("vendor.dtv.audio.skipamadec", "false");
-#endif
-#endif
 
     if (0 == dvr_check_dmx_isNew())
     {
@@ -2110,6 +2054,13 @@ int main(int argc, char *argv[])
         dvb_set_demux_source(DMX_DEV_NO, DVB_DEMUX_SOURCE_DMA0);
         ext_dvr_playback(tspath, g_cas_handle);
     }
+
+    sprintf(cmd, "mount -t debugfs debugfs /sys/kernel/debug");
+    system(cmd);
+    sprintf(cmd, "echo 1 > /sys/kernel/debug/dri/0/vpu/blank");
+    system(cmd);
+
+
 
     sprintf(cmd, "echo 1 > /sys/class/graphics/fb0/osd_display_debug");
     system(cmd);
