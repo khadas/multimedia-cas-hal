@@ -1,7 +1,10 @@
 OUTPUT_FILES := libcJSON.a liblinuxdvb_port.a libamcas.a cas_hal_test_bin
 
+OUT_DIR ?= .
+$(info "OUT_DIR : $(OUT_DIR)")
+
 CFLAGS  := -Wall -O2 -fPIC -IlibcJSON -Ilibamcas/include -Iliblinuxdvb_port/include -I$(STAGING_DIR)/usr/include/libdvr
-LDFLAGS := -L$(TARGET_DIR)/usr/lib -lamdvr -lmediahal_tsplayer -laudio_client -llog -lpthread -ldl
+LDFLAGS := -L$(OUT_DIR) -L$(TARGET_DIR)/usr/lib -lamdvr -lmediahal_tsplayer -laudio_client -llog -lpthread -ldl
 
 LIBCJSON_SRCS := libcJSON/cJSON.c
 LIBCJSON_OBJS := $(patsubst %.c,%.o,$(LIBCJSON_SRCS))
@@ -31,27 +34,33 @@ ALL_OBJS += $(CAS_HAL_TEST_OBJS)
 all: $(OUTPUT_FILES)
 
 %.o: %.c
-	$(CC) -c -o $@ $< $(CFLAGS)
+	$(CC) -c -o $(OUT_DIR)/$@ $< $(CFLAGS)
 
 libcJSON.a: $(LIBCJSON_OBJS)
-	$(AR) rcs $@ $(LIBCJSON_OBJS)
+	$(AR) rcs $(OUT_DIR)/$@ $(patsubst %, $(OUT_DIR)/%, $^)
 
 liblinuxdvb_port.a: $(LIBLINUXDVB_PORT_OBJS)
-	$(AR) rcs $@ $(LIBLINUXDVB_PORT_OBJS)
+	$(AR) rcs $(OUT_DIR)/$@ $(patsubst %, $(OUT_DIR)/%, $^)
 
 libamcas.a: $(LIBAMCAS_OBJS)
-	$(AR) rcs $@ $(LIBAMCAS_OBJS)
+	$(AR) rcs $(OUT_DIR)/$@ $(patsubst %, $(OUT_DIR)/%, $^)
 
 cas_hal_test_bin: $(CAS_HAL_TEST_OBJS) libcJSON.a liblinuxdvb_port.a libamcas.a
-	$(CC) -o $@ $(CAS_HAL_TEST_OBJS) -L. -lamcas -lcJSON -llinuxdvb_port $(LDFLAGS)
+	$(CC) -o $(OUT_DIR)/$@ $(patsubst %, $(OUT_DIR)/%, $(CAS_HAL_TEST_OBJS)) -L. -lamcas -lcJSON -llinuxdvb_port $(LDFLAGS)
 
 install: $(OUTPUT_FILES)
-	install -m 0755 ./libamcas.a $(STAGING_DIR)/usr/lib
+	install -m 0755 $(OUT_DIR)/libamcas.a $(STAGING_DIR)/usr/lib
 	install -d -m 0755 $(STAGING_DIR)/usr/include/libamcas
 	install -m 0644 ./libamcas/include/* $(STAGING_DIR)/usr/include/libamcas
-	install -m 0755 ./cas_hal_test_bin $(STAGING_DIR)/usr/bin
+	install -m 0755 $(OUT_DIR)/cas_hal_test_bin $(STAGING_DIR)/usr/bin
 
 clean:
-	rm -f $(ALL_OBJS) $(OUTPUT_FILES)
+	rm -f $(patsubst %, $(OUT_DIR)/%, $(ALL_OBJS))
+	rm -f $(patsubst %, $(OUT_DIR)/%, $(OUTPUT_FILES))
 
 .PHONY: all install clean
+
+$(shell mkdir -p $(OUT_DIR)/liblinuxdvb_port/src)
+$(shell mkdir -p $(OUT_DIR)/libamcas/src)
+$(shell mkdir -p $(OUT_DIR)/libcJSON)
+$(shell mkdir -p $(OUT_DIR)/cas_hal_test)
